@@ -28,8 +28,7 @@ class Sample(object):
         # Response labels #
         ###################
         self.true_response = label
-        self.false_response = get_false_response_label(responses, label)
-        self.res_label_vec = [self.true_response, self.false_response]
+        self.res_label_vec = [self.true_response] + get_false_response_label(responses, label)
 
         ####################
         # Addressee labels #
@@ -109,7 +108,8 @@ def get_false_response_label(response, label):
     cand_indices = range(n_responses)
     cand_indices.remove(label)
     np.random.shuffle(cand_indices)
-    return cand_indices[0]
+#    return cand_indices[0]
+    return cand_indices
 
 
 def get_speaking_agent_one_hot_vector(context, agent_index_dict, max_n_agents):

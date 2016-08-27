@@ -2,7 +2,7 @@ import theano
 import numpy as np
 from collections import defaultdict
 
-from ..utils import say
+from ..utils import say, load_dataset, load_init_emb, dump_data
 from ..ling import UNK
 from sample import Sample
 
@@ -170,7 +170,7 @@ def statistics(samples, max_n_agents):
         say('\n\t\tNum %d: %d' % (n_agents, ttl))
 
 
-def theano_format(samples, batch_size, n_cands=2, test=False):
+def theano_format(samples, batch_size, n_cands, test=False):
     """
     :param samples: 1D: n_samples; elem=Sample
     :return shared_sampleset: 1D: 8, 2D: n_baches, 3D: batch
@@ -249,6 +249,74 @@ def theano_format(samples, batch_size, n_cands=2, test=False):
         sampleset.append((batch, array(binned_n_agents), array(labels_a), array(labels_r)))
 
     return sampleset
+
+
+def theano_format_shared(samples, batch_size, n_cands):
+    """
+    :param samples: 1D: n_samples; elem=Sample
+    :return shared_sampleset: 1D: 8, 2D: n_baches, 3D: batch
+    """
+
+    def shared(_sample, _float=False):
+        if _float:
+            return theano.shared(np.asarray(_sample, dtype=theano.config.floatX), borrow=True)
+        else:
+            return theano.shared(np.asarray(_sample, dtype='int32'), borrow=True)
+
+    samples.sort(key=lambda sample: sample.n_agents_in_lctx)
+    samples = shuffle_batch(samples)
+
+    ##############
+    # Initialize #
+    ##############
+    sampleset = [[] for i in xrange(6)]
+    evalset = []
+    batch = [[] for i in xrange(5)]
+    binned_n_agents = []
+    labels_a = []
+    labels_r = []
+
+    prev_n_agents = samples[0].n_agents_in_lctx
+
+    for sample in samples:
+        n_agents = sample.n_agents_in_lctx
+
+        if len(batch[0]) == batch_size:
+            sampleset[0].append(batch[0])
+            sampleset[1].append(batch[1])
+            sampleset[2].append(batch[2])
+            sampleset[3].append(batch[3])
+            sampleset[4].append(batch[4])
+            sampleset[5].append(prev_n_agents)
+
+            evalset.append((binned_n_agents, labels_a, labels_r))
+
+            batch = [[] for i in xrange(5)]
+            binned_n_agents = []
+            labels_a = []
+            labels_r = []
+
+        if n_agents != prev_n_agents:
+            batch = [[] for i in xrange(5)]
+            prev_n_agents = n_agents
+
+        ##################
+        # Create a batch #
+        ##################
+        batch[0].append(sample.context)
+        batch[1].append(sample.response)
+        batch[2].append(sample.speaking_agent_one_hot_vector)
+        batch[3].append(batch_indexing(sample.res_label_vec, batch_size=len(batch[3]), n_labels=n_cands))
+        batch[4].append(batch_indexing(sample.adr_label_vec, batch_size=len(batch[4]), n_labels=n_agents - 1))
+
+        binned_n_agents.append(sample.binned_n_agents_in_ctx)
+        labels_a.append(sample.true_addressee)
+        labels_r.append(sample.true_response)
+
+    n_batches = len(sampleset[-1])
+    shared_sampleset = map(lambda s: shared(s[1]) if s[0] != 2 else shared(s[1], True), enumerate(sampleset))
+
+    return shared_sampleset, n_batches, evalset
 
 
 def batch_indexing(vec, batch_size, n_labels):

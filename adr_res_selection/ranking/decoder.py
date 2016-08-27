@@ -65,12 +65,13 @@ class Decoder(object):
                                        )
 
     def set_test_f(self):
-        self.pred_f = theano.function(inputs=self.model.inputs,
-                                      outputs=[self.model.a_hat, self.model.r_hat],
+        model = self.model
+        self.pred_f = theano.function(inputs=model.inputs,
+                                      outputs=[model.a_hat, model.r_hat],
                                       on_unused_input='ignore'
                                       )
-        self.pred_r_f = theano.function(inputs=self.model.inputs,
-                                        outputs=self.model.r_hat,
+        self.pred_r_f = theano.function(inputs=model.inputs,
+                                        outputs=model.r_hat,
                                         on_unused_input='ignore'
                                         )
 

@@ -1,6 +1,13 @@
+import os
+import time
+import math
+
+import numpy as np
 import theano
 import theano.tensor as T
 
+from ..utils import say, dump_data
+from eval import Evaluator
 from ..nn import rnn, attention
 from ..nn import initialize_weights, build_shared_zeros, sigmoid, loss_function, regularization, get_grad_norm, optimizer_select
 
@@ -10,7 +17,10 @@ class Model(object):
     def __init__(self, argv, max_n_agents, n_vocab, init_emb):
         self.argv = argv
 
-        self.inputs = None
+        ###################
+        # Input variables #
+        ###################
+        self.inputs = []
         self.params = []
 
         ###################
@@ -81,6 +91,164 @@ class Model(object):
         self.g_norm = get_grad_norm(grads)
         self.update = optimizer_select(self.opt, self.params, grads, self.lr)
 
+    def get_pnorm_stat(self):
+        lst_norms = []
+        for p in self.params:
+            vals = p.get_value(borrow=True)
+            l2 = np.linalg.norm(vals)
+            lst_norms.append("{:.3f}".format(l2))
+        return lst_norms
+
+    def evaluate(self, pred_f, pred_r_f, c, r, a, y_r, y_a, n_agents):
+        pred_a = None
+        if n_agents > 1:
+            pred_a, pred_r = pred_f(c, r, a, y_r, y_a, n_agents)
+        else:
+            pred_r = pred_r_f(c, r, a, y_r, y_a, n_agents)
+        return pred_a, pred_r
+
+    def evaluate_all(self, samples, pred_f, pred_r_f):
+        evaluator = Evaluator()
+        start = time.time()
+
+        for i, sample in enumerate(samples):
+            if i != 0 and i % 100 == 0:
+                say("  {}/{}".format(i, len(samples)))
+
+            x = sample[0]
+            binned_n_agents = sample[1]
+            labels_a = sample[2]
+            labels_r = sample[3]
+            pred_a, pred_r = self.evaluate(pred_f, pred_r_f, c=x[0], r=x[1], a=x[2], y_r=x[3], y_a=x[4], n_agents=x[5])
+
+            evaluator.update(binned_n_agents, 0., 0., pred_a, pred_r, labels_a, labels_r)
+
+        end = time.time()
+        say('\n\tTime: %f' % (end - start))
+        evaluator.show_results()
+        return evaluator.acc_both
+
+    def train(self, train_samples, n_train_batches, evalset, dev_samples, test_samples):
+        argv = self.argv
+        n_prev_sents = argv.n_prev_sents
+        max_n_words = argv.max_n_words
+
+        #################
+        # Build a model #
+        #################
+        say('\n\nBuilding a model...')
+        index = T.iscalar('index')
+        train_f = theano.function(inputs=[index],
+                                  outputs=[self.nll, self.g_norm, self.a_hat, self.r_hat],
+                                  updates=self.update,
+                                  givens={
+                                      self.inputs[0]: train_samples[0][index],
+                                      self.inputs[1]: train_samples[1][index],
+                                      self.inputs[2]: train_samples[2][index],
+                                      self.inputs[3]: train_samples[3][index],
+                                      self.inputs[4]: train_samples[4][index],
+                                      self.inputs[5]: train_samples[5][index]
+                                  }
+                                  )
+
+        pred_f = theano.function(inputs=self.inputs,
+                                 outputs=[self.a_hat, self.r_hat],
+                                 on_unused_input='ignore'
+                                 )
+        pred_r_f = theano.function(inputs=self.inputs,
+                                   outputs=self.r_hat,
+                                   on_unused_input='ignore'
+                                   )
+
+        ############
+        # Training #
+        ############
+        say('\nTraining start\n')
+
+        acc_history = {}
+        best_dev_acc_both = 0.
+        unchanged = 0
+
+        cand_indices = range(n_train_batches)
+
+        for epoch in xrange(argv.epoch):
+            evaluator = Evaluator()
+
+            say('\n\n')
+            os.system("ps -p %d u" % os.getpid())
+
+            ##############
+            # Early stop #
+            ##############
+            unchanged += 1
+            if unchanged > 15:
+                say('\n\nEARLY STOP\n')
+                break
+
+            say('\n\n\nEpoch: %d' % (epoch + 1))
+            say('\n  TRAIN\n  ')
+
+            np.random.shuffle(cand_indices)
+
+            ############
+            # Training #
+            ############
+            start = time.time()
+            for index, b_index in enumerate(cand_indices):
+                if index != 0 and index % 100 == 0:
+                    say("  {}/{}".format(index, len(cand_indices)))
+
+                cost, g_norm, pred_a, pred_r = train_f(b_index)
+                binned_n_agents, labels_a, labels_r = evalset[b_index]
+
+                if math.isnan(cost):
+                    say('\n\nLoss is NAN: Mini-Batch Index: %d\n' % index)
+                    exit()
+
+                evaluator.update(binned_n_agents, cost, g_norm, pred_a, pred_r, labels_a, labels_r)
+
+            end = time.time()
+            say('\n\tTime: %f' % (end - start))
+            say("\n\tp_norm: {}\n".format(self.get_pnorm_stat()))
+            evaluator.show_results()
+
+            ##############
+            # Validating #
+            ##############
+            if argv.dev_data:
+                say('\n\n  DEV\n  ')
+                dev_acc_both = self.evaluate_all(dev_samples, pred_f, pred_r_f)
+
+                if dev_acc_both > best_dev_acc_both:
+                    unchanged = 0
+                    best_dev_acc_both = evaluator.acc_both
+                    acc_history[epoch+1] = [best_dev_acc_both]
+
+                    if argv.save:
+                        fn = 'Model-%s.unit-%s.attention-%d.batch-%d.reg-%f.sents-%d.words-%d' %\
+                             (argv.model, argv.unit, argv.attention, argv.batch, argv.reg, n_prev_sents, max_n_words)
+                        dump_data(self, fn)
+
+            if argv.test_data:
+                say('\n\n\r  TEST\n  ')
+                test_acc_both = self.evaluate_all(test_samples, pred_f, pred_r_f)
+
+                if unchanged == 0:
+                    if epoch+1 in acc_history:
+                        acc_history[epoch+1].append(test_acc_both)
+                    else:
+                        acc_history[epoch+1] = [test_acc_both]
+
+            #####################
+            # Show best results #
+            #####################
+            say('\n\n\tBEST ACCURACY HISTORY')
+            for k, v in sorted(acc_history.items()):
+                if len(v) == 2:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV ACC:{:.2%}\tBEST TEST ACC:{:.2%}'.format(k, v[0], v[1]))
+                else:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV ACC:{:.2%}'.format(k, v[0]))
+
 
 class DynamicModel(Model):
 
@@ -88,17 +256,7 @@ class DynamicModel(Model):
         super(DynamicModel, self).__init__(argv, max_n_agents, n_vocab, init_emb)
 
     def compile(self, c, r, a, y_r, y_a, n_agents):
-        """
-        :param c: 1D: batch, 2D: n_prev_sents, 3D: n_words
-        :param r: 1D: batch, 2D: n_cands, 3D: n_words
-        :param a: 1D: batch, 2D: n_prev_sents, 3D: max_n_agents; elem=one hot vector
-        :param y_r: 1D: batch, 2D: n_cands
-        :param y_a: 1D: batch, 2D: max_n_agents (vec of n_agents-1  + pad)
-        :param n_agents: num of agents in the context and response; scalar
-        """
-
         self.inputs = [c, r, a, y_r, y_a, n_agents]
-
         batch = T.cast(c.shape[0], 'int32')
         n_prev_sents = T.cast(c.shape[1], 'int32')
 
@@ -223,17 +381,7 @@ class StaticModel(Model):
         super(StaticModel, self).__init__(argv, max_n_agents, n_vocab, init_emb)
 
     def compile(self, c, r, a, y_r, y_a, n_agents):
-        """
-        :param c: 1D: batch, 2D: n_prev_sents, 3D: n_words
-        :param r: 1D: batch, 2D: n_cands, 3D: n_words
-        :param a: 1D: batch, 2D: n_prev_sents, 3D: max_n_agents; elem=one hot vector
-        :param y_r: 1D: batch, 2D: n_cands
-        :param y_a: 1D: batch, 2D: max_n_agents (vec of n_agents-1  + pad)
-        :param n_agents: num of agents in the context and response; scalar
-        """
-
         self.inputs = [c, r, a, y_r, y_a, n_agents]
-
         batch = T.cast(c.shape[0], 'int32')
         n_prev_sents = T.cast(c.shape[1], 'int32')
 

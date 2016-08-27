@@ -82,4 +82,3 @@ class Evaluator(object):
 
             say('\n\t  %d\tBoth: %f (%d/%d)  Addressee: %f (%d/%d)  Response: %f (%d/%d)' %
                 (n_agents+1, acc_both, crr_both, total, acc_adr, crr_adr, total, acc_res, crr_res, total))
-

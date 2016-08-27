@@ -1,15 +1,15 @@
-import time
-import math
+import os
 
-import numpy as np
-
-from ..utils import say, load_dataset, load_init_emb, dump_data
-from preprocessor import get_samples, theano_format
-from decoder import Decoder
-from eval import Evaluator
+import theano.tensor as T
+from ..utils import say, load_dataset, load_init_emb
+from model import StaticModel, DynamicModel
+from preprocessor import get_samples, theano_format, theano_format_shared
 
 
 def train(argv):
+    say('\n\n')
+    os.system("ps -p %d u" % os.getpid())
+
     say('\nSET UP TRAINING SETTINGS\n')
 
     ###########################
@@ -44,131 +44,50 @@ def train(argv):
 
     train_dataset = get_samples(threads=train_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
                                 max_n_words=max_n_words, test=False, sample_size=argv.sample_size)
-    train_samples = theano_format(train_dataset, argv.batch)
-    n_train_batches = len(train_samples)
+    train_samples, n_train_batches, evalset = theano_format_shared(train_dataset, argv.batch, n_cands=n_cands)
+    del train_dataset
     say('\n\nTRAIN SETTING\tBatch Size:%d  Epoch:%d  Vocab:%d  Max Words:%d  Unit:%s  Mini-Batch:%d' %
         (argv.batch, argv.epoch, token_dict.size(), max_n_words, argv.unit, n_train_batches))
 
     if argv.dev_data:
         dev_dataset = get_samples(threads=dev_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
                                   max_n_words=max_n_words, test=True, sample_size=argv.sample_size)
-        dev_samples = theano_format(dev_dataset, argv.batch, True)
+        dev_samples = theano_format(dev_dataset, argv.batch, n_cands=n_cands, test=True)
+        del dev_dataset
         say('\n\nDEV SETTING\tMini-Batch:%d' % len(dev_samples))
 
     if argv.test_data:
         test_dataset = get_samples(threads=test_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
                                    max_n_words=max_n_words, test=True, sample_size=argv.sample_size)
-        test_samples = theano_format(test_dataset, argv.batch, True)
+        test_samples = theano_format(test_dataset, argv.batch, n_cands=n_cands, test=True)
+        del test_dataset
         say('\n\nTEST SETTING\tMini-Batch:%d' % len(test_samples))
 
-    train_data = dev_data = test_data = None
+    ###############
+    # Set a model #
+    ###############
+    say('\n\tMODEL: %s  Unit: %s  Opt: %s  Activation: %s\n' % (argv.model, argv.unit, argv.opt, argv.activation))
 
-    #################
-    # Build a model #
-    #################
-    say('\n\nBuilding a model...')
-    decoder = Decoder(argv=argv, emb=emb, vocab=token_dict.w2i, n_prev_sents=n_prev_sents)
-    decoder.set_model()
-    decoder.set_train_f()
-    decoder.set_test_f()
+    if argv.model == 'static':
+        model = StaticModel(argv=argv, max_n_agents=n_prev_sents+1, n_vocab=token_dict.size(), init_emb=emb)
+    else:
+        model = DynamicModel(argv=argv, max_n_agents=n_prev_sents+1, n_vocab=token_dict.size(), init_emb=emb)
 
-    ###################
-    # Train the model #
-    ###################
-    say('\nTraining start\n')
+    c = T.itensor3('c')
+    r = T.itensor3('r')
+    a = T.ftensor3('a')
+    y_r = T.imatrix('y_r')
+    y_a = T.imatrix('y_a')
+    n_agents = T.iscalar('n_agents')
 
-    acc_history = {}
-    best_dev_acc_both = 0.
-    unchanged = 0
-    cand_indices = range(n_train_batches)
+    model.compile(c, r, a, y_r, y_a, n_agents)
 
-    for epoch in xrange(argv.epoch):
-        ##############
-        # Early stop #
-        ##############
-        unchanged += 1
-        if unchanged > 15:
-            say('\n\nEARLY STOP\n')
-            break
-
-        say('\n\n\nEpoch: %d' % (epoch + 1))
-        say('\n  TRAIN\n  ')
-
-        evaluator = Evaluator()
-
-        #######################
-        # Shuffle the samples #
-        #######################
-        train_samples = theano_format(train_dataset, argv.batch)
-        np.random.shuffle(cand_indices)
-
-        ############
-        # Training #
-        ############
-        start = time.time()
-        for index, b_index in enumerate(cand_indices):
-            if index != 0 and index % 100 == 0:
-                say("  {}/{}".format(index, len(cand_indices)))
-
-            sample = train_samples[b_index]
-            x = sample[0]
-            binned_n_agents = sample[1]
-            labels_a = sample[2]
-            labels_r = sample[3]
-
-            cost, g_norm, pred_a, pred_r = decoder.train(c=x[0], r=x[1], a=x[2], res_vec=x[3], adr_vec=x[4], n_agents=x[5])
-#            cost, g_norm, pred_a, pred_r, alpha = decoder.train(c=x[0], r=x[1], a=x[2], res_vec=x[3], adr_vec=x[4], n_agents=x[5])
-
-            if math.isnan(cost):
-                say('\n\nLoss is NAN: Mini-Batch Index: %d\n' % index)
-                exit()
-
-            evaluator.update(binned_n_agents, cost, g_norm, pred_a, pred_r, labels_a, labels_r)
-
-        end = time.time()
-        say('\n\tTime: %f' % (end - start))
-        say("\n\tp_norm: {}\n".format(decoder.get_pnorm_stat()))
-        evaluator.show_results()
-
-        ############
-        # Dev data #
-        ############
-        if argv.dev_data:
-            say('\n\n  DEV\n  ')
-            dev_acc_t = decoder.predict_all(dev_samples)
-
-            if dev_acc_t > best_dev_acc_both:
-                unchanged = 0
-                best_dev_acc_both = dev_acc_t
-                acc_history[epoch+1] = [best_dev_acc_both]
-
-                if argv.save:
-                    fn = 'Model-%s.unit-%s.attention-%d.batch-%d.reg-%f.sents-%d.words-%d' %\
-                         (argv.model, argv.unit, argv.attention, argv.batch, argv.reg, n_prev_sents, max_n_words)
-                    dump_data(decoder.model, fn)
-
-        #############
-        # Test data #
-        #############
-        if argv.test_data:
-            say('\n\n\r  TEST\n  ')
-            test_acc_both = decoder.predict_all(test_samples)
-
-            if unchanged == 0:
-                if epoch+1 in acc_history:
-                    acc_history[epoch+1].append(test_acc_both)
-                else:
-                    acc_history[epoch+1] = [test_acc_both]
-
-        #####################
-        # Show best results #
-        #####################
-        say('\n\n\tBEST ACCURACY HISTORY')
-        for k, v in sorted(acc_history.items()):
-            if len(v) == 2:
-                say('\n\tEPOCH-{:d}  \tBEST DEV ACC:{:.2%}\tBEST TEST ACC:{:.2%}'.format(k, v[0], v[1]))
-            else:
-                say('\n\tEPOCH-{:d}  \tBEST DEV ACC:{:.2%}'.format(k, v[0]))
+    model.train(train_samples,
+                n_train_batches,
+                evalset,
+                dev_samples if argv.dev_data else None,
+                test_samples if argv.test_data else None
+                )
 
 
 def main(argv):

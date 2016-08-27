@@ -1,6 +1,7 @@
-from ..utils import say, load_dataset, load_init_emb
+import theano
+
+from ..utils import say, load_dataset, load_init_emb, load_data
 from preprocessor import get_samples, theano_format
-from decoder import Decoder
 
 
 def test(argv):
@@ -52,28 +53,30 @@ def test(argv):
     # Build a model #
     #################
     say('\n\nBuilding a model...')
-    decoder = Decoder(argv=argv, emb=emb, vocab=token_dict.w2i, n_prev_sents=n_prev_sents)
-    decoder.load_model(argv.load)
-    decoder.set_test_f()
-
-    ##################
-    # Test the model #
-    ##################
-    say('\nTesting start\n')
+    model = load_data(argv.load)
+    pred_f = theano.function(inputs=model.inputs,
+                             outputs=[model.a_hat, model.r_hat],
+                             on_unused_input='ignore'
+                             )
+    pred_r_f = theano.function(inputs=model.inputs,
+                               outputs=model.r_hat,
+                               on_unused_input='ignore'
+                               )
 
     ############
     # Dev data #
     ############
+    say('\nTesting start\n')
     if argv.dev_data:
         say('\n\n  DEV\n  ')
-        dev_acc_t = decoder.predict_all(dev_samples)
+        dev_acc_both = model.evaluate_all(dev_samples, pred_f, pred_r_f)
 
     #############
     # Test data #
     #############
     if argv.test_data:
         say('\n\n\r  TEST\n  ')
-        test_acc_both = decoder.predict_all(test_samples)
+        test_acc_both = model.evaluate_all(test_samples, pred_f, pred_r_f)
 
     say('\n\n')
 

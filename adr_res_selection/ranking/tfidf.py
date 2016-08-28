@@ -170,17 +170,17 @@ def main(argv):
     # dataset: 1D: n_samples; 2D: Sample
     say('\n\nSetting datasets...')
 
-    train_dataset = get_samples(threads=train_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
+    train_dataset = get_samples(threads=train_data, vocab=token_dict.w2i, n_prev_sents=n_prev_sents,
                                 max_n_words=max_n_words, test=False, sample_size=argv.sample_size)
     say('\n\nTRAIN SETTING\tVocab:%d' % token_dict.size())
 
     if argv.dev_data:
-        dev_dataset = get_samples(threads=dev_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
+        dev_dataset = get_samples(threads=dev_data, vocab=token_dict.w2i, n_prev_sents=n_prev_sents,
                                   max_n_words=max_n_words, test=True, sample_size=argv.sample_size)
         train_dataset += dev_dataset
 
     if argv.test_data:
-        test_dataset = get_samples(threads=test_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
+        test_dataset = get_samples(threads=test_data, vocab=token_dict.w2i, n_prev_sents=n_prev_sents,
                                    max_n_words=max_n_words, test=True, sample_size=argv.sample_size)
         train_dataset += test_dataset
 

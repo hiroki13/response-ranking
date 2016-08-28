@@ -13,11 +13,8 @@ def say(s, stream=sys.stdout):
     stream.flush()
 
 
-def load_dataset(fn, check=False, vocab=set([])):
+def load_dataset(fn, vocab=set([]), check=False):
     """
-    :param fn:
-    :param check:
-    :param vocab:
     :return: samples: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, cand_res1, ... , label)
     """
     if fn is None:
@@ -25,7 +22,9 @@ def load_dataset(fn, check=False, vocab=set([])):
 
     samples = []
     sample = []
-    with gzip.open(fn, 'rb') as gf:
+    file_open = gzip.open if fn.endswith(".gz") else open
+
+    with file_open(fn) as gf:
         # line: (time, speaker_id, addressee_id, cand_res1, cand_res2, ... , label)
         for line in gf:
             line = line.rstrip().split("\t")
@@ -55,7 +54,7 @@ def load_dataset(fn, check=False, vocab=set([])):
 
 
 def load_init_emb(init_emb, vocab_words):
-    say('\n\tLoad Initial Word Embedding...')
+    say('\nLoad Initial Word Embedding...')
 
     vocab = Vocab()
 
@@ -72,7 +71,7 @@ def load_init_emb(init_emb, vocab_words):
         for w in vocab_words:
             vocab.add_word(w)
         emb = None
-        say('\n\t  Random Initialized Word Embeddings')
+        say('\n\tRandom Initialized Word Embeddings')
     else:
         emb = []
         with open(init_emb) as lines:
@@ -92,7 +91,7 @@ def load_init_emb(init_emb, vocab_words):
         emb = np.asarray(emb, dtype=theano.config.floatX)
 
         assert emb.shape[0] == vocab.size() - 1, 'emb: %d  vocab: %d' % (emb.shape[0], vocab.size())
-        say('\n\t  Word Embedding Size: %d' % emb.shape[0])
+        say('\n\tWord Embedding Size: %d' % emb.shape[0])
 
     return vocab, emb
 

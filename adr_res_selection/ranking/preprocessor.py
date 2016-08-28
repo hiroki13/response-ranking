@@ -2,22 +2,55 @@ import theano
 import numpy as np
 from collections import defaultdict
 
-from ..utils import say, load_dataset, load_init_emb, dump_data
+from ..utils import say
 from ..ling import UNK
 from sample import Sample
 
 
-def get_samples(threads, token_dict, n_prev_sents=5, max_n_words=20, sample_size=10000000, test=False):
+def convert_word_into_id(threads, vocab):
+    """
+    :param threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
+    :return: threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
+    """
+
+    if threads is None:
+        return None
+
+    def get_word_ids(tokens):
+        w_ids = []
+        for token in tokens:
+            if vocab.has_key(token):
+                w_ids.append(vocab.get_id(token))
+            else:
+                w_ids.append(vocab.get_id(UNK))
+        return w_ids
+
+    count = 0
+    for thread in threads:
+        for sent in thread:
+            sent[3] = get_word_ids(tokens=sent[3])
+            if sent[2] != '-':
+                for i, r in enumerate(sent[4:-1]):
+                    sent[4 + i] = get_word_ids(tokens=r)
+                count += 1
+
+    say('\n\tQuestions: %d' % count)
+    return threads
+
+
+def get_samples(threads, n_prev_sents, max_n_words=20, sample_size=10000000, test=False):
     """
     :param threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
     :return: samples: 1D: n_samples; elem=Sample()
     """
 
+    if threads is None:
+        return None
+
     samples = []
     max_n_agents = n_prev_sents + 1
-    threads = set_token_id(threads, token_dict)
 
-    say('\n\tThreads: %d' % len(threads))
+    say('\n\n\tThreads: %d' % len(threads))
     for thread in threads:
         agents_in_ctx = set([])
         thread_utterances = []
@@ -96,29 +129,6 @@ def get_samples(threads, token_dict, n_prev_sents=5, max_n_words=20, sample_size
     return samples
 
 
-def set_token_id(samples, token_dict):
-    def set_id(tokens):
-        w_ids = []
-        for token in tokens:
-            if token_dict.has_key(token):
-                w_ids.append(token_dict[token])
-            else:
-                w_ids.append(token_dict[UNK])
-        return w_ids
-
-    count = 0
-    for sample in samples:
-        for sent in sample:
-            sent[3] = set_id(tokens=sent[3])
-            if sent[2] != '-':
-                for i, r in enumerate(sent[4:-1]):
-                    sent[4 + i] = set_id(tokens=r)
-                count += 1
-
-    say('\n\n\tQuestions: %d' % count)
-    return samples
-
-
 def limit_sentence_length(sents, max_n_words):
     return [sent[:max_n_words] for sent in sents]
 
@@ -181,6 +191,9 @@ def theano_format(samples, batch_size, n_cands, test=False):
             return np.asarray(_sample, dtype=theano.config.floatX)
         else:
             return np.asarray(_sample, dtype='int32')
+
+    if samples is None:
+        return None
 
     ########
     # Sort #
@@ -320,9 +333,6 @@ def theano_format_shared(samples, batch_size, n_cands):
 
 
 def batch_indexing(vec, batch_size, n_labels):
-    """
-    :return: 1D: n_labels; index
-    """
     indexed_vec = []
     for v in vec:
         if v > -1:

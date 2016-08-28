@@ -1,20 +1,21 @@
 import time
 import gzip
+import math
+import cPickle as pickle
 
 import numpy as np
 import theano
 import theano.tensor as T
 
+from ..utils import say, load_data, dump_data
 from model import StaticModel, DynamicModel
-from ..ling import Vocab
-from ..utils import say, load_data
-from eval import Evaluator
+from evaluator import Evaluator
 
 
-class Decoder(object):
-    def __init__(self, argv, emb, vocab, n_prev_sents):
+class ModelAPI(object):
+    def __init__(self, argv, init_emb, vocab, n_prev_sents):
         self.argv = argv
-        self.emb = emb
+        self.init_emb = init_emb
         self.vocab = vocab
         self.max_n_agents = n_prev_sents + 1
 
@@ -24,6 +25,7 @@ class Decoder(object):
         self.pred_r_f = None
 
     def set_model(self):
+        say('\n\nBUILD A MODEL\n')
         argv = self.argv
 
         #####################
@@ -37,13 +39,13 @@ class Decoder(object):
         n_agents = T.iscalar('n_agents')
 
         max_n_agents = self.max_n_agents
-        init_emb = self.emb
-        n_vocab = len(self.vocab)
+        init_emb = self.init_emb
+        n_vocab = self.vocab.size()
 
         #################
         # Build a model #
         #################
-        print '\tMODEL: %s  Unit: %s  Opt: %s  Activation: %s' % (argv.model, argv.unit, argv.opt, argv.activation)
+        say('MODEL: %s  Unit: %s  Opt: %s  Activation: %s  ' % (argv.model, argv.unit, argv.opt, argv.activation))
 
         if argv.model == 'static':
             model = StaticModel
@@ -53,14 +55,35 @@ class Decoder(object):
         self.model = model(argv, max_n_agents, n_vocab, init_emb)
         self.model.compile(c=c, r=r, a=a, y_r=y_r, y_a=y_a, n_agents=n_agents)
 
-    def load_model(self, fn):
-        self.model = load_data(fn)
+    def load_model(self):
+        self.model = load_data(self.argv.load)
 
-    def set_train_f(self):
+    def save_model(self):
+        argv = self.argv
+        fn = 'Model-%s.unit-%s.at-%d.batch-%d.reg-%f.sents-%d.words-%d' %\
+             (argv.model, argv.unit, argv.attention, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
+        dump_data(self.model, fn)
+
+    def set_train_f(self, train_samples):
+        model = self.model
+        index = T.iscalar('index')
+        self.train_f = theano.function(inputs=[index],
+                                       outputs=[model.nll, model.g_norm, model.a_hat, model.r_hat],
+                                       updates=model.update,
+                                       givens={
+                                           model.inputs[0]: train_samples[0][index],
+                                           model.inputs[1]: train_samples[1][index],
+                                           model.inputs[2]: train_samples[2][index],
+                                           model.inputs[3]: train_samples[3][index],
+                                           model.inputs[4]: train_samples[4][index],
+                                           model.inputs[5]: train_samples[5][index]
+                                       }
+                                       )
+
+    def set_train_online_f(self):
         model = self.model
         self.train_f = theano.function(inputs=model.inputs,
                                        outputs=[model.nll, model.g_norm, model.a_hat, model.r_hat],
-#                                       outputs=[model.nll, model.g_norm, model.a_hat, model.r_hat, model.alpha],
                                        updates=model.update,
                                        )
 
@@ -77,18 +100,37 @@ class Decoder(object):
 
     def train(self, c, r, a, res_vec, adr_vec, n_agents):
         nll, g_norm, pred_a, pred_r = self.train_f(c, r, a, res_vec, adr_vec, n_agents)
-#        nll, g_norm, pred_a, pred_r, alpha = self.train_f(c, r, a, res_vec, adr_vec, n_agents)
         return nll, g_norm, pred_a, pred_r
-#        return nll, g_norm, pred_a, pred_r, alpha
 
-    def predict(self, c, r, a, res_vec, adr_vec, n_agents):
+    def train_all(self, batch_indices, evalset):
+        evaluator = Evaluator()
+        np.random.shuffle(batch_indices)
+        start = time.time()
+
+        for index, b_index in enumerate(batch_indices):
+            if index != 0 and index % 100 == 0:
+                say("  {}/{}".format(index, len(batch_indices)))
+
+            cost, g_norm, pred_a, pred_r = self.train_f(b_index)
+            binned_n_agents, labels_a, labels_r = evalset[b_index]
+
+            if math.isnan(cost):
+                say('\n\nLoss is NAN: Mini-Batch Index: %d\n' % index)
+                exit()
+
+            evaluator.update(binned_n_agents, cost, g_norm, pred_a, pred_r, labels_a, labels_r)
+
+        end = time.time()
+        say('\n\tTime: %f' % (end - start))
+        say("\n\tp_norm: {}\n".format(self.get_pnorm_stat()))
+        evaluator.show_results()
+
+    def predict(self, c, r, a, y_r, y_a, n_agents):
         pred_a = None
-
         if n_agents > 1:
-            pred_a, pred_r = self.pred_f(c, r, a, res_vec, adr_vec, n_agents)
+            pred_a, pred_r = self.pred_f(c, r, a, y_r, y_a, n_agents)
         else:
-            pred_r = self.pred_r_f(c, r, a, res_vec, adr_vec, n_agents)
-
+            pred_r = self.pred_r_f(c, r, a, y_r, y_a, n_agents)
         return pred_a, pred_r
 
     def predict_all(self, samples):
@@ -103,7 +145,7 @@ class Decoder(object):
             binned_n_agents = sample[1]
             labels_a = sample[2]
             labels_r = sample[3]
-            pred_a, pred_r = self.predict(c=x[0], r=x[1], a=x[2], res_vec=x[3], adr_vec=x[4], n_agents=x[5])
+            pred_a, pred_r = self.predict(c=x[0], r=x[1], a=x[2], y_r=x[3], y_a=x[4], n_agents=x[5])
 
             evaluator.update(binned_n_agents, 0., 0., pred_a, pred_r, labels_a, labels_r)
 

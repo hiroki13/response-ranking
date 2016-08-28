@@ -4,6 +4,16 @@ import theano.tensor as T
 from nn_utils import sigmoid, tanh, initialize_weights
 
 
+class Layer(object):
+
+    def __init__(self, n_i, n_h):
+        self.W = theano.shared(initialize_weights(n_i, n_h))
+        self.params = [self.W]
+
+    def forward(self, h):
+        return T.dot(h, self.W)
+
+
 class RNN(object):
 
     def __init__(self, n_i, n_h, activation=tanh):

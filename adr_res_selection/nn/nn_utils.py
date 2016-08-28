@@ -1,6 +1,3 @@
-import gzip
-import cPickle
-
 import numpy as np
 import theano
 import theano.tensor as T
@@ -25,17 +22,26 @@ def normalize_3d(x, eps=1e-8):
     return x / (l2 + eps)
 
 
-def loss_function(y_p, n_p):
+def binary_cross_entropy(y_p, n_p):
     return - (T.sum(T.log(y_p)) + T.sum(T.log(1. - n_p)))
 
 
-def max_margin(y_p, n_p):
+def cross_entropy_loss(scores):
+    """
+    :param scores: 1D: n_queries, 2D: n_cands; column0=pos, column1-=neg
+    :return: avg hinge_loss: float
+    """
+    probs = T.nnet.softmax(scores)
+    return - T.mean(T.log(probs[:, 0]))
+
+
+def hinge_loss(y_p, n_p):
     """
     :param y_p: 1D: batch, 2D: dim_h
     :param n_p: 1D: batch, 2D: dim_h
     :return: float32
     """
-    diff = y_p - n_p + 1.0
+    diff = 0.1 - y_p + n_p
     return T.mean((diff > 0) * diff)
 
 
@@ -83,15 +89,3 @@ def build_shared_zeros(shape):
         value=np.zeros(shape, dtype=theano.config.floatX),
         borrow=True
     )
-
-
-def dump_data(data, fn):
-    with gzip.open(fn + '.pkl.gz', 'wb') as gf:
-        cPickle.dump(data, gf, cPickle.HIGHEST_PROTOCOL)
-
-
-def load_data(fn):
-    with gzip.open(fn, 'rb') as gf:
-        return cPickle.load(gf)
-
-

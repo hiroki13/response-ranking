@@ -34,7 +34,7 @@ class ModelAPI(object):
         c = T.itensor3('c')
         r = T.itensor3('r')
         a = T.ftensor3('a')
-        y_r = T.imatrix('y_r')
+        y_r = T.ivector('y_r')
         y_a = T.imatrix('y_a')
         n_agents = T.iscalar('n_agents')
 

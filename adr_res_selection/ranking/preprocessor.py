@@ -1,44 +1,46 @@
 import theano
 import numpy as np
-from collections import defaultdict
 
 from ..utils import say
-from ..ling import UNK
+from ..utils.stats import statistics
+from ..ling import UNK, Vocab
 from sample import Sample
 
 
-def convert_word_into_id(threads, vocab):
+def convert_word_into_id(threads, vocab_word):
     """
     :param threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
+    :param vocab_word: Vocab()
     :return: threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
     """
 
     if threads is None:
         return None
 
-    def get_word_ids(tokens):
-        w_ids = []
-        for token in tokens:
-            if vocab.has_key(token):
-                w_ids.append(vocab.get_id(token))
-            else:
-                w_ids.append(vocab.get_id(UNK))
-        return w_ids
-
     count = 0
     for thread in threads:
         for sent in thread:
-            sent[3] = get_word_ids(tokens=sent[3])
+            sent[3] = get_word_ids(tokens=sent[3], vocab_word=vocab_word)
             if sent[2] != '-':
                 for i, r in enumerate(sent[4:-1]):
-                    sent[4 + i] = get_word_ids(tokens=r)
+                    sent[4 + i] = get_word_ids(tokens=r, vocab_word=vocab_word)
                 count += 1
 
-    say('\n\tQuestions: %d' % count)
+    say('\n\tQuestions: {:>8}'.format(count))
     return threads
 
 
-def get_samples(threads, n_prev_sents, max_n_words=20, sample_size=10000000, test=False):
+def get_word_ids(tokens, vocab_word):
+    w_ids = []
+    for token in tokens:
+        if vocab_word.has_key(token):
+            w_ids.append(vocab_word.get_id(token))
+        else:
+            w_ids.append(vocab_word.get_id(UNK))
+    return w_ids
+
+
+def get_samples(threads, n_prev_sents, max_n_words=20, pad=True, test=False):
     """
     :param threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
     :return: samples: 1D: n_samples; elem=Sample()
@@ -47,89 +49,84 @@ def get_samples(threads, n_prev_sents, max_n_words=20, sample_size=10000000, tes
     if threads is None:
         return None
 
+    say('\n\n\tTHREADS: {:>5}'.format(len(threads)))
+
     samples = []
     max_n_agents = n_prev_sents + 1
 
-    say('\n\n\tThreads: %d' % len(threads))
     for thread in threads:
-        agents_in_ctx = set([])
-        thread_utterances = []
-
-        for i, sent in enumerate(thread):
-            time = sent[0]
-            speaker_id = sent[1]
-            addressee_id = sent[2]
-            responses = limit_sentence_length(sent[3:-1], max_n_words)
-            label = sent[-1]
-            context = None
-
-            ##############################################################
-            # Whether the addressee has appeared in the previous context #
-            ##############################################################
-            is_new_adr = False if addressee_id in agents_in_ctx else True
-
-            ###############################################
-            # Get the limited context if sent is a sample #
-            ###############################################
-            if label > -1:
-                # context: 1D: n_prev_sent, 2D: (time, speaker_id, addressee_id, tokens)
-                if len(thread_utterances) >= n_prev_sents:
-                    context = thread_utterances[i - n_prev_sents:i]
-                else:
-                    if test:
-                        context = thread_utterances[:i]
-
-            ##############################################################
-            # Original sentences are identical to ground-truth responses #
-            ##############################################################
-            if label > -1:
-                thread_utterances.append((time, speaker_id, addressee_id, responses[label]))
-            else:
-                thread_utterances.append((time, speaker_id, addressee_id, responses[0]))
-
-            ############################
-            # Add the appeared speaker #
-            ############################
-            agents_in_ctx.add(speaker_id)
-
-            ###################################
-            # Add the sample into the dataset #
-            ###################################
-            if speaker_id != addressee_id and is_new_adr is False and context is not None:
-                # context: 1D: n_prev_sent, 2D: (time, speaker_id, addressee_id, tokens)
-                n_agents_in_lctx = len(set([c[1] for c in context] + [speaker_id]))
-
-                ###################
-                # Create a sample #
-                ###################
-                n_agents_in_ctx = len(agents_in_ctx)
-                sample = Sample(context=context, time=time, speaker_id=speaker_id, addressee_id=addressee_id,
-                                responses=responses, label=label, n_agents_in_lctx=n_agents_in_lctx,
-                                n_agents_in_ctx=n_agents_in_ctx, max_n_agents=max_n_agents, max_n_words=max_n_words)
-
-                ##################
-                # Add the sample #
-                ##################
-                if test:
-                    samples.append(sample)
-                else:
-                    # The num of the agents in the training samples is n_agents > 1
-                    # -1 means that the addressee does not appear in the limited context
-                    if sample.true_addressee > -1:
-                        samples.append(sample)
-
-            ###############################
-            # Limit the number of samples #
-            ###############################
-            if len(samples) == sample_size:
-                break
+        samples += get_one_thread_samples(thread, max_n_words, max_n_agents, n_prev_sents, pad, test)
 
     statistics(samples, max_n_agents)
 
     return samples
 
 
-def limit_sentence_length(sents, max_n_words):
+def get_one_thread_samples(thread, max_n_words, max_n_agents, n_prev_sents, pad=True, test=False):
+    samples = []
+    sents = []
+    agents_in_ctx = set([])
+
+    for i, sent in enumerate(thread):
+        time = sent[0]
+        spk_id = sent[1]
+        adr_id = sent[2]
+        label = sent[-1]
+
+        context = get_context(i, sents, n_prev_sents, label, test)
+        responses = limit_sent_length(sent[3:-1], max_n_words)
+
+        original_sent = get_original_sent(responses, label)
+        sents.append((time, spk_id, adr_id, original_sent))
+
+        agents_in_ctx.add(spk_id)
+
+        ################################
+        # Judge if it is sample or not #
+        ################################
+        if is_sample(context, spk_id, adr_id, agents_in_ctx):
+            sample = Sample(context=context, spk_id=spk_id, adr_id=adr_id, responses=responses, label=label,
+                            n_agents_in_ctx=len(agents_in_ctx), max_n_agents=max_n_agents, max_n_words=max_n_words,
+                            pad=pad)
+            if test:
+                samples.append(sample)
+            else:
+                # The num of the agents in the training samples is n_agents > 1
+                # -1 means that the addressee does not appear in the limited context
+                if sample.true_adr > -1:
+                    samples.append(sample)
+
+    return samples
+
+
+def is_sample(context, spk_id, adr_id, agents_in_ctx):
+    if context is None:
+        return False
+    if spk_id == adr_id:
+        return False
+    if adr_id not in agents_in_ctx:
+        return False
+    return True
+
+
+def get_context(i, sents, n_prev_sents, label, test=False):
+    # context: 1D: n_prev_sent, 2D: (time, speaker_id, addressee_id, tokens, label)
+    context = None
+    if label > -1:
+        if len(sents) >= n_prev_sents:
+            context = sents[i - n_prev_sents:i]
+        elif test:
+            context = sents[:i]
+    return context
+
+
+def get_original_sent(responses, label):
+    if label > -1:
+        return responses[label]
+    return responses[0]
+
+
+def limit_sent_length(sents, max_n_words):
     return [sent[:max_n_words] for sent in sents]
 
 
@@ -137,47 +134,43 @@ def get_max_n_words(context, response):
     return np.max([len(r) for r in response] + [len(c[-1]) for c in context])
 
 
-def statistics(samples, max_n_agents):
-    agent_stats = defaultdict(int)
-    ctx_stats = defaultdict(int)
-    lctx_stats = defaultdict(int)
-    adr_stats = defaultdict(int)
-    na_adr_stats = defaultdict(int)
+def convert_sample_into_ids(samples, vocab_word=Vocab()):
+    if samples is None:
+        return None, None
+
+    register = False
+    if vocab_word.size() == 0:
+        register = True
 
     for sample in samples:
-        agent_stats[sample.binned_n_agents_in_ctx] += 1
-        ctx_stats[sample.binned_n_agents_in_ctx] += 1
-        lctx_stats[sample.n_agents_in_lctx] += 1
-        if sample.true_addressee > -1:
-            adr_stats[sample.n_agents_in_lctx] += 1
+        ctx_ids = []
+        res_ids = []
+        for c in sample.context:
+            ctx_ids.append(convert_one_sample_into_ids(c, vocab_word, register))
+        for i, r in enumerate(sample.response):
+            if i == sample.true_res:
+                res_ids.append(convert_one_sample_into_ids(r, vocab_word, register))
+            else:
+                res_ids.append(convert_one_sample_into_ids(r, vocab_word, False))
+        sample.context = ctx_ids
+        sample.response = res_ids
+
+    return samples, vocab_word
+
+
+def convert_one_sample_into_ids(sent, vocab_word, register):
+    ids = []
+    for w in sent:
+        if vocab_word.has_key(w):
+            w_id = vocab_word.get_id(w)
         else:
-            na_adr_stats[sample.n_agents_in_lctx] += 1
-
-    total = 0.
-    c_total = 0.
-
-    for k, v in agent_stats.items():
-        total += v
-        c_total += k * v
-    say('\n\t  TOTAL USED SAMPLES: %d  ADDRESSEE DETECTION CHANCE LEVEL: %f  RESPONSES: %d' %
-        (total, total / c_total, len(sample.response)))
-
-    say('\n\t  SAMPLE INFO: The Number of Agents in Limited Context:')
-    for n_agents in xrange(max_n_agents):
-        n_agents += 1
-        if n_agents in adr_stats:
-            ttl1 = adr_stats[n_agents]
-        else:
-            ttl1 = 0
-        if n_agents in na_adr_stats:
-            ttl2 = na_adr_stats[n_agents]
-        else:
-            ttl2 = 0
-        say('\n\t\tNum %d: %d  NA-Agents: %d  TOTAL: %d' % (n_agents, ttl1, ttl2, ttl1+ttl2))
-
-    say('\n\n\t  SAMPLE INFO: The Binned Number of Agents in Context:')
-    for n_agents, ttl in sorted(ctx_stats.items(), key=lambda x: x[0]):
-        say('\n\t\tNum %d: %d' % (n_agents, ttl))
+            if register:
+                vocab_word.add_word(w)
+                w_id = vocab_word.get_id(w)
+            else:
+                w_id = -1
+        ids.append(w_id)
+    return ids
 
 
 def theano_format(samples, batch_size, n_cands, test=False):
@@ -248,13 +241,13 @@ def theano_format(samples, batch_size, n_cands, test=False):
         ##################
         batch[0].append(sample.context)
         batch[1].append(sample.response)
-        batch[2].append(sample.speaking_agent_one_hot_vector)
+        batch[2].append(sample.spk_agent_one_hot_vec)
         batch[3].append(batch_indexing(sample.res_label_vec, batch_size=len(batch[3]), n_labels=n_cands))
         batch[4].append(batch_indexing(sample.adr_label_vec, batch_size=len(batch[4]), n_labels=n_agents - 1))
 
         binned_n_agents.append(sample.binned_n_agents_in_ctx)
-        labels_a.append(sample.true_addressee)
-        labels_r.append(sample.true_response)
+        labels_a.append(sample.true_adr)
+        labels_r.append(sample.true_res)
 
     if batch[0]:
         batch.append(prev_n_agents)
@@ -318,13 +311,13 @@ def theano_format_shared(samples, batch_size, n_cands):
         ##################
         batch[0].append(sample.context)
         batch[1].append(sample.response)
-        batch[2].append(sample.speaking_agent_one_hot_vector)
+        batch[2].append(sample.spk_agent_one_hot_vec)
         batch[3].append(batch_indexing(sample.res_label_vec, batch_size=len(batch[3]), n_labels=n_cands))
         batch[4].append(batch_indexing(sample.adr_label_vec, batch_size=len(batch[4]), n_labels=n_agents - 1))
 
         binned_n_agents.append(sample.binned_n_agents_in_ctx)
-        labels_a.append(sample.true_addressee)
-        labels_r.append(sample.true_response)
+        labels_a.append(sample.true_adr)
+        labels_r.append(sample.true_res)
 
     n_batches = len(sampleset[-1])
     shared_sampleset = map(lambda s: shared(s[1]) if s[0] != 2 else shared(s[1], True), enumerate(sampleset))

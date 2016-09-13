@@ -58,27 +58,53 @@ class Evaluator(object):
         self.ttl_g_norm += g_norm
 
     def show_results(self):
-        acc_adr = self.acc_adr = self.crr_adr / self.total
-        acc_res = self.acc_res = self.crr_res / self.total
-        acc_both = self.acc_both = self.crr_both / self.total
-
+        ###########################
+        # Training-related values #
+        ###########################
         say('\n\tTotal NLL: %f\tTotal Grad Norm: %f' % (self.ttl_cost, self.ttl_g_norm))
         say('\n\tAvg.  NLL: %f\tAvg.  Grad Norm: %f' % (self.ttl_cost / self.index, self.ttl_g_norm / self.index))
 
-        say('\n\n\tAccuracy\n\t\tBoth: %f (%d/%d)  Addressee: %f (%d/%d)  Response: %f (%d/%d)' %
-            (acc_both, self.crr_both, self.total, acc_adr, self.crr_adr, self.total, acc_res, self.crr_res, self.total))
+        ######################
+        # Prediction results #
+        ######################
+        crr_adr = self.crr_adr
+        crr_res = self.crr_res
+        crr_both = self.crr_both
+        total = self.total
 
-        say('\n\n\tAccuracy for each Binned Num of Agents in Context')
+        acc_adr = self.acc_adr = crr_adr / total
+        acc_res = self.acc_res = crr_res / total
+        acc_both = self.acc_both = crr_both / total
+
+        text = 'Both: {:>7.2%} ({:>7}/{:>7})  Adr: {:>7.2%} ({:>7}/{:>7})  Res: {:>7.2%} ({:>7}/{:>7})\n'
+
+        total = int(total)
+        say('\n\n\tAccuracy\n\tTOTAL  ' + text.format(
+            acc_both, int(crr_both), total,
+            acc_adr, int(crr_adr), total,
+            acc_res, int(crr_res), total))
+
         for n_agents in xrange(self.results.shape[0]):
+            text = 'Both: {:>7.2%} ({:>7}/{:>7})  Adr: {:>7.2%} ({:>7}/{:>7})  Res: {:>7.2%} ({:>7}/{:>7})'
             result = self.results[n_agents]
             crr_adr = result[0]
             crr_res = result[1]
             crr_both = result[2]
             total = result[3]
 
-            acc_adr = crr_adr / total
-            acc_res = crr_res / total
-            acc_both = crr_both / total
+            if total > 0:
+                acc_both = crr_both / total
+                acc_adr = crr_adr / total
+                acc_res = crr_res / total
+            else:
+                acc_both = 0.
+                acc_adr = 0.
+                acc_res = 0.
 
-            say('\n\t  %d\tBoth: %f (%d/%d)  Addressee: %f (%d/%d)  Response: %f (%d/%d)' %
-                (n_agents+1, acc_both, crr_both, total, acc_adr, crr_adr, total, acc_res, crr_res, total))
+            total = int(total)
+            say('\n\t{:>5}  '.format(n_agents) + text.format(
+                acc_both, int(crr_both), total,
+                acc_adr, int(crr_adr), total,
+                acc_res, int(crr_res), total))
+        say('\n')
+

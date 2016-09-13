@@ -1,5 +1,3 @@
-import os
-
 from ..utils import say, load_dataset, load_init_emb
 from model_api import ModelAPI
 from preprocessor import convert_word_into_id, get_samples, theano_format, theano_format_shared
@@ -8,33 +6,33 @@ from preprocessor import convert_word_into_id, get_samples, theano_format, thean
 def get_datasets(argv):
     say('\nSET UP DATASET\n')
 
-    ###########################
-    # Task setting parameters #
-    ###########################
-    n_cands = argv.n_cands
-    n_prev_sents = argv.n_prev_sents
-    max_n_words = argv.max_n_words
-    say('\nTASK  SETTING')
-    say('\n\tResponse Candidates:%d  Contexts:%d  Max Word Num:%d' % (n_cands, n_prev_sents, max_n_words))
+    sample_size = argv.sample_size
 
     #################
     # Load datasets #
     #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
-    say('\n\nLoad dataset...')
-    train_dataset, word_set = load_dataset(fn=argv.train_data, check=argv.check)
-    dev_dataset, word_set = load_dataset(fn=argv.dev_data, vocab=word_set, check=argv.check)
-    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, check=argv.check)
+    say('\nLoad dataset...')
+    train_dataset, word_set = load_dataset(fn=argv.train_data, sample_size=sample_size, check=argv.check)
+    dev_dataset, word_set = load_dataset(fn=argv.dev_data, vocab=word_set, sample_size=sample_size, check=argv.check)
+    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, sample_size=sample_size, check=argv.check)
 
     return train_dataset, dev_dataset, test_dataset, word_set
 
 
 def create_samples(argv, train_dataset, dev_dataset, test_dataset, vocab_words):
-    n_cands = argv.n_cands
+    ###########################
+    # Task setting parameters #
+    ###########################
     n_prev_sents = argv.n_prev_sents
     max_n_words = argv.max_n_words
     batch_size = argv.batch
-    sample_size = argv.sample_size
+
+    cands = train_dataset[0][0][3:-1]
+    n_cands = len(cands)
+
+    say('\n\nTASK  SETTING')
+    say('\n\tResponse Candidates:%d  Contexts:%d  Max Word Num:%d\n' % (n_cands, n_prev_sents, max_n_words))
 
     ##########################
     # Convert words into ids #
@@ -50,11 +48,11 @@ def create_samples(argv, train_dataset, dev_dataset, test_dataset, vocab_words):
     ##################
     say('\n\nCreating samples...')
     train_samples = get_samples(threads=train_samples, n_prev_sents=n_prev_sents,
-                                max_n_words=max_n_words, sample_size=sample_size)
+                                max_n_words=max_n_words)
     dev_samples = get_samples(threads=dev_samples, n_prev_sents=n_prev_sents,
-                              max_n_words=max_n_words, sample_size=sample_size, test=True)
+                              max_n_words=max_n_words, test=True)
     test_samples = get_samples(threads=test_samples, n_prev_sents=n_prev_sents,
-                               max_n_words=max_n_words, sample_size=sample_size, test=True)
+                               max_n_words=max_n_words, test=True)
 
     ###################################
     # Create theano-formatted samples #
@@ -83,14 +81,11 @@ def train(argv, model_api, n_train_batches, evalset, dev_samples, test_samples):
     batch_indices = range(n_train_batches)
 
     for epoch in xrange(argv.epoch):
-        say('\n\n')
-        os.system('free -m')
-
         ##############
         # Early stop #
         ##############
         unchanged += 1
-        if unchanged > 15:
+        if unchanged > 5:
             say('\n\nEARLY STOP\n')
             break
 
@@ -98,7 +93,7 @@ def train(argv, model_api, n_train_batches, evalset, dev_samples, test_samples):
         # Training #
         ############
         say('\n\n\nEpoch: %d' % (epoch + 1))
-        say('\n  TRAIN\n  ')
+        say('\n  TRAIN  ')
 
         model_api.train_all(batch_indices, evalset)
 
@@ -106,36 +101,38 @@ def train(argv, model_api, n_train_batches, evalset, dev_samples, test_samples):
         # Validating #
         ##############
         if dev_samples:
-            say('\n\n  DEV\n  ')
-            dev_acc_both = model_api.predict_all(dev_samples)
+            say('\n\n  DEV  ')
+            dev_acc_both, dev_acc_adr, dev_acc_res = model_api.predict_all(dev_samples)
 
             if dev_acc_both > best_dev_acc_both:
                 unchanged = 0
                 best_dev_acc_both = dev_acc_both
-                acc_history[epoch+1] = [best_dev_acc_both]
+                acc_history[epoch+1] = [(best_dev_acc_both, dev_acc_adr, dev_acc_res)]
 
                 if argv.save:
                     model_api.save_model()
 
         if test_samples:
-            say('\n\n\r  TEST\n  ')
-            test_acc_both = model_api.predict_all(test_samples)
+            say('\n\n\r  TEST  ')
+            test_acc_both, test_acc_adr, test_acc_res = model_api.predict_all(test_samples)
 
             if unchanged == 0:
                 if epoch+1 in acc_history:
-                    acc_history[epoch+1].append(test_acc_both)
+                    acc_history[epoch+1].append((test_acc_both, test_acc_adr, test_acc_res))
                 else:
-                    acc_history[epoch+1] = [test_acc_both]
+                    acc_history[epoch+1] = [(test_acc_both, test_acc_adr, test_acc_res)]
 
         #####################
         # Show best results #
         #####################
-        say('\n\n\tBEST ACCURACY HISTORY')
+        say('\n\tBEST ACCURACY HISTORY')
         for k, v in sorted(acc_history.items()):
+            text = '\n\tEPOCH-{:>3} | DEV  Both:{:>7.2%}  Adr:{:>7.2%}  Res:{:>7.2%}'
+            text = text.format(k, v[0][0], v[0][1], v[0][2])
             if len(v) == 2:
-                say('\n\tEPOCH-{:d}  \tBEST DEV ACC:{:.2%}\tBEST TEST ACC:{:.2%}'.format(k, v[0], v[1]))
-            else:
-                say('\n\tEPOCH-{:d}  \tBEST DEV ACC:{:.2%}'.format(k, v[0]))
+                text += ' | TEST  Both:{:>7.2%}  Adr:{:>7.2%}  Res:{:>7.2%}'
+                text = text.format(v[1][0], v[1][1], v[1][2])
+            say(text)
 
 
 def main(argv):

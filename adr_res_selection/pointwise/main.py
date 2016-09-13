@@ -39,14 +39,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch', type=int, default=32, help='batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--epoch', type=int, default=30, help='number of epochs')
-    parser.add_argument('--lr', type=float, default=0.01, help='learning rate')
+    parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--activation', default='tanh', help='activation')
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
+    parser.add_argument('--attention', type=int, default=0, help='attention')
 
-    parser.add_argument('--save', type=bool, default=False, help='parameters to be saved or not')
+    parser.add_argument('--save', type=int, default=0, help='parameters to be saved or not')
     parser.add_argument('--load', default=None, help='model file to be loaded')
-    parser.add_argument('--vocab', default=None, help='Initial vocabulary to be loaded')
+    parser.add_argument('--output', type=int, default=0, help='output results')
 
     #################
     # Starting mode #
@@ -59,6 +60,9 @@ if __name__ == '__main__':
     if argv.mode == 'train':
         import train
         train.main(argv)
+    elif argv.mode == 'tfidf':
+        import tfidf
+        tfidf.main(argv)
     else:
         import test
         test.main(argv)

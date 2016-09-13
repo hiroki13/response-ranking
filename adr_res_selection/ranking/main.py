@@ -47,6 +47,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--save', type=int, default=0, help='parameters to be saved or not')
     parser.add_argument('--load', default=None, help='model file to be loaded')
+    parser.add_argument('--output', type=int, default=0, help='output results')
 
     #################
     # Starting mode #
@@ -59,6 +60,9 @@ if __name__ == '__main__':
     if argv.mode == 'train':
         import train
         train.main(argv)
+    elif argv.mode == 'tfidf':
+        import tfidf
+        tfidf.main(argv)
     else:
         import test
         test.main(argv)

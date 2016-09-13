@@ -3,45 +3,40 @@ import numpy as np
 
 class Sample(object):
 
-    def __init__(self, context, time, speaker_id, addressee_id, responses, label,
-                 n_agents_in_lctx, n_agents_in_ctx, max_n_agents, max_n_words, pad=True):
+    def __init__(self, context, spk_id, adr_id, responses, label, n_agents_in_ctx, max_n_agents, max_n_words, pad=True):
 
-        self.orig_context = context
-        self.time = time
-        self.speaker_id = speaker_id
-        self.addressee_id = addressee_id
-        self.responses = responses
-        self.label = label
-
-        agent_index_dict = indexing(speaker_id, context)
+        # str
+        self.spk_id = spk_id
+        self.adr_id = adr_id
 
         # 1D: n_prev_sents, 2D: max_n_words
-        self.context = padding_context(context, max_n_words) if pad else context
-
+        self.context = padding_context(context, max_n_words) if pad else [c[-1] for c in context]
         # 1D: n_cands, 2D: max_n_words
         self.response = padding_response(responses, max_n_words) if pad else responses
 
+        self.agent_index_dict = indexing(spk_id, context)
         # 1D: n_prev_sents, 2D: max_n_agents; one-hot vector
-        self.speaking_agent_one_hot_vector = get_speaking_agent_one_hot_vector(context, agent_index_dict, max_n_agents)
+        self.spk_agent_one_hot_vec = get_spk_agent_one_hot_vec(context, self.agent_index_dict, max_n_agents)
+        self.spk_agents = [s.index(1) for s in self.spk_agent_one_hot_vec]
 
         ###################
         # Response labels #
         ###################
-        self.true_response = label
-        self.res_label_vec = [self.true_response] + get_false_response_label(responses, label)
+        self.true_res = label
+        self.res_label_vec = [self.true_res] + get_false_res_label(responses, label)
 
         ####################
         # Addressee labels #
         ####################
-        self.true_addressee = get_addressee_label(addressee_id, agent_index_dict)
-        self.adr_label_vec = get_addressee_label_vector(addressee_id, agent_index_dict, max_n_agents)
+        self.true_adr = get_adr_label(adr_id, self.agent_index_dict)
+        self.adr_label_vec = get_adr_label_vec(adr_id, self.agent_index_dict, max_n_agents)
 
-        self.n_agents_in_lctx = n_agents_in_lctx
+        self.n_agents_in_lctx = len(set([c[1] for c in context] + [spk_id]))
         self.binned_n_agents_in_ctx = bin_n_agents_in_ctx(n_agents_in_ctx)
         self.n_agents_in_ctx = n_agents_in_ctx
 
 
-def get_addressee_label(addressee_id, agent_index_dict):
+def get_adr_label(addressee_id, agent_index_dict):
     """
     :param addressee_id: the addressee of the response; int
     :param agent_index_dict: {agent id: agent index}
@@ -58,23 +53,7 @@ def get_addressee_label(addressee_id, agent_index_dict):
     return true_addressee
 
 
-def bin_n_agents_in_ctx(n):
-    if n < 6:
-        return 0
-    elif n < 11:
-        return 1
-    elif n < 16:
-        return 2
-    elif n < 21:
-        return 3
-    elif n < 31:
-        return 4
-    elif n < 101:
-        return 5
-    return 6
-
-
-def get_addressee_label_vector(adr_id, agent_index_dict, max_n_agents):
+def get_adr_label_vec(adr_id, agent_index_dict, max_n_agents):
     """
     :param adr_id: the addressee of the response; int
     :param agent_index_dict: {agent id: agent index}
@@ -98,7 +77,7 @@ def get_addressee_label_vector(adr_id, agent_index_dict, max_n_agents):
     return y
 
 
-def get_false_response_label(response, label):
+def get_false_res_label(response, label):
     """
     :param response: [response1, response2, ... ]
     :param label: true response label; int
@@ -108,11 +87,10 @@ def get_false_response_label(response, label):
     cand_indices = range(n_responses)
     cand_indices.remove(label)
     np.random.shuffle(cand_indices)
-#    return cand_indices[0]
     return cand_indices
 
 
-def get_speaking_agent_one_hot_vector(context, agent_index_dict, max_n_agents):
+def get_spk_agent_one_hot_vec(context, agent_index_dict, max_n_agents):
     """
     :param context: 1D: n_prev_sents, 2D: n_words
     :param agent_index_dict: {agent id: agent index}
@@ -152,4 +130,20 @@ def padding_context(context, max_n_words):
         diff = max_n_words - len(_sent)
         return [0 for i in xrange(diff)] + _sent
     return [padding_sent(sent[-1]) for sent in context]
+
+
+def bin_n_agents_in_ctx(n):
+    if n < 6:
+        return 0
+    elif n < 11:
+        return 1
+    elif n < 16:
+        return 2
+    elif n < 21:
+        return 3
+    elif n < 31:
+        return 4
+    elif n < 101:
+        return 5
+    return 6
 

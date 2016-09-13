@@ -3,40 +3,48 @@ import numpy as np
 
 class Sample(object):
 
-    def __init__(self, context, time, speaker_id, addressee_id, responses, label,
-                 n_agents_in_lctx, binned_n_agents_in_ctx, n_agents_in_ctx, max_n_agents, max_n_words):
+    def __init__(self, context, spk_id, adr_id, responses, label, n_agents_in_ctx, max_n_agents, max_n_words, pad=True,
+                 test=False):
 
-        self.orig_context = context
-        self.time = time
-        self.speaker_id = speaker_id
-        self.addressee_id = addressee_id
-        self.responses = responses
-        self.label = label
-
-        agent_index_dict = indexing(speaker_id, context)
+        # str
+        self.spk_id = spk_id
+        self.adr_id = adr_id
 
         # 1D: n_prev_sents, 2D: max_n_words
-        self.context = padding_context(context, max_n_words)
-
+        self.context = padding_context(context, max_n_words) if pad else [c[-1] for c in context]
         # 1D: n_cands, 2D: max_n_words
-        self.response = padding_response(responses, max_n_words)
+        self.response = padding_response(responses, max_n_words) if pad else responses
 
+        self.agent_index_dict = indexing(spk_id, context)
         # 1D: n_prev_sents, 2D: max_n_agents; one-hot vector
-        self.speaking_agent_one_hot_vector = get_speaking_agent_one_hot_vector(context, agent_index_dict, max_n_agents)
+        self.spk_agent_one_hot_vec = get_spk_agent_one_hot_vec(context, self.agent_index_dict, max_n_agents)
+        self.spk_agents = [s.index(1) for s in self.spk_agent_one_hot_vec]
 
-        self.true_response = label
-        self.false_response = get_false_response_label(responses, label)
+        ###################
+        # Response labels #
+        ###################
+        false_res_label = get_false_res_label(responses, label)
+        self.true_res = get_true_res_label(label, false_res_label, test)
+        self.response = self.response if test else get_responses(label, false_res_label, self.response)
 
-        adr_labels = get_addressee_labels(addressee_id, agent_index_dict)
-        self.true_addressee = adr_labels[0]
-        self.false_addressee = adr_labels[1]
+        ####################
+        # Addressee labels #
+        ####################
+        self.true_adr = get_adr_label(adr_id, self.agent_index_dict)
+        self.adr_label_vec = get_adr_label_vec(adr_id, self.agent_index_dict, max_n_agents)
 
-        self.n_agents_in_lctx = n_agents_in_lctx
-        self.binned_n_agents_in_ctx = binned_n_agents_in_ctx
+        self.n_agents_in_lctx = len(set([c[1] for c in context] + [spk_id]))
+        self.binned_n_agents_in_ctx = bin_n_agents_in_ctx(n_agents_in_ctx)
         self.n_agents_in_ctx = n_agents_in_ctx
 
 
-def get_addressee_labels(addressee_id, agent_index_dict):
+def get_responses(true_label, false_label, response):
+    if true_label < false_label:
+        return [response[true_label]] + [response[false_label]]
+    return [response[false_label]] + [response[true_label]]
+
+
+def get_adr_label(addressee_id, agent_index_dict):
     """
     :param addressee_id: the addressee of the response; int
     :param agent_index_dict: {agent id: agent index}
@@ -47,25 +55,13 @@ def get_addressee_labels(addressee_id, agent_index_dict):
     # the case of including addressee in the limited context
     if addressee_id in agent_index_dict and n_agents_lctx > 1:
         true_addressee = agent_index_dict[addressee_id] - 1
-
-        # responding agent id == addressee agent id
-        cand_indices = range(n_agents_lctx - 1)
-        cand_indices.remove(true_addressee)
-
-        # Negative addressee candidates do not exist
-        if len(cand_indices) == 0:
-            false_addressee = 0
-        else:
-            np.random.shuffle(cand_indices)
-            false_addressee = cand_indices[0]
     else:
         true_addressee = -1
-        false_addressee = -1
 
-    return true_addressee, false_addressee
+    return true_addressee
 
 
-def get_addressee_label_vector(adr_id, agent_index_dict):
+def get_adr_label_vec(adr_id, agent_index_dict, max_n_agents):
     """
     :param adr_id: the addressee of the response; int
     :param agent_index_dict: {agent id: agent index}
@@ -84,10 +80,20 @@ def get_addressee_label_vector(adr_id, agent_index_dict):
             if i not in y:
                 y.append(i)
 
+    pad = [-1 for i in xrange(max_n_agents-1-len(y))]
+    y = y + pad
     return y
 
 
-def get_false_response_label(response, label):
+def get_true_res_label(true_label, false_label, test):
+    if test:
+        return true_label
+    if true_label < false_label:
+        return 0
+    return 1
+
+
+def get_false_res_label(response, label):
     """
     :param response: [response1, response2, ... ]
     :param label: true response label; int
@@ -100,7 +106,7 @@ def get_false_response_label(response, label):
     return cand_indices[0]
 
 
-def get_speaking_agent_one_hot_vector(context, agent_index_dict, max_n_agents):
+def get_spk_agent_one_hot_vec(context, agent_index_dict, max_n_agents):
     """
     :param context: 1D: n_prev_sents, 2D: n_words
     :param agent_index_dict: {agent id: agent index}
@@ -140,4 +146,20 @@ def padding_context(context, max_n_words):
         diff = max_n_words - len(_sent)
         return [0 for i in xrange(diff)] + _sent
     return [padding_sent(sent[-1]) for sent in context]
+
+
+def bin_n_agents_in_ctx(n):
+    if n < 6:
+        return 0
+    elif n < 11:
+        return 1
+    elif n < 16:
+        return 2
+    elif n < 21:
+        return 3
+    elif n < 31:
+        return 4
+    elif n < 101:
+        return 5
+    return 6
 

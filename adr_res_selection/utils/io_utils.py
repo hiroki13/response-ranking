@@ -13,7 +13,7 @@ def say(s, stream=sys.stdout):
     stream.flush()
 
 
-def load_dataset(fn, vocab=set([]), check=False):
+def load_dataset(fn, vocab=set([]), sample_size=1000000, check=False):
     """
     :return: samples: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, cand_res1, ... , label)
     """
@@ -31,6 +31,9 @@ def load_dataset(fn, vocab=set([]), check=False):
             if len(line) < 6:
                 samples.append(sample)
                 sample = []
+
+                if len(samples) >= sample_size:
+                    break
             else:
                 for i, sent in enumerate(line[3:-1]):
                     word_ids = []
@@ -94,6 +97,29 @@ def load_init_emb(init_emb, vocab_words):
         say('\n\tWord Embedding Size: %d' % emb.shape[0])
 
     return vocab, emb
+
+
+def output_samples(fn, samples, vocab_word):
+    if samples is None:
+        return
+
+    with gzip.open(fn + '.gz', 'wb') as gf:
+        for sample in samples:
+            agent_index_dict = [None for i in xrange(len(sample.agent_index_dict))]
+            for k, v in sample.agent_index_dict.items():
+                agent_index_dict[v] = k
+
+            for a, c in zip(sample.spk_agents, sample.context):
+                text = '%s\t-\t' % agent_index_dict[a]
+                text += ' '.join([vocab_word.get_word(w) for w in c])
+                print >> gf, text
+
+            text = '%s\t%s\t' % (sample.spk_id, sample.adr_id)
+            for r in sample.response:
+                text += '%s\t' % ' '.join([vocab_word.get_word(w) for w in r])
+            text += '%d' % sample.label
+            print >> gf, text
+            print >> gf
 
 
 def dump_data(data, fn):

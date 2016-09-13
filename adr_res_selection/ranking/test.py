@@ -6,32 +6,40 @@ from preprocessor import convert_word_into_id, get_samples, theano_format
 def get_datasets(argv):
     say('\nSET UP DATASET\n')
 
-    ###########################
-    # Task setting parameters #
-    ###########################
-    n_cands = argv.n_cands
-    n_prev_sents = argv.n_prev_sents
-    max_n_words = argv.max_n_words
-    say('\nTASK  SETTING')
-    say('\n\tResponse Candidates:%d  Contexts:%d  Max Word Num:%d' % (n_cands, n_prev_sents, max_n_words))
+    sample_size = argv.sample_size
 
     #################
     # Load datasets #
     #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
-    say('\n\nLoad dataset...')
-    dev_dataset, word_set = load_dataset(fn=argv.dev_data, check=argv.check)
-    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, check=argv.check)
+    say('\nLoad dataset...')
+    dev_dataset, word_set = load_dataset(fn=argv.dev_data, sample_size=sample_size, check=argv.check)
+    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, sample_size=sample_size, check=argv.check)
 
     return dev_dataset, test_dataset, word_set
 
 
 def create_samples(argv, dev_dataset, test_dataset, vocab_words):
-    n_cands = argv.n_cands
+    ###########################
+    # Task setting parameters #
+    ###########################
     n_prev_sents = argv.n_prev_sents
     max_n_words = argv.max_n_words
     batch_size = argv.batch
-    sample_size = argv.sample_size
+
+    if dev_dataset:
+        dataset = dev_dataset
+    elif test_dataset:
+        dataset = test_dataset
+    else:
+        say('\nInput dataset\n')
+        exit()
+
+    cands = dataset[0][0][3:-1]
+    n_cands = len(cands)
+
+    say('\n\nTASK  SETTING')
+    say('\n\tResponse Candidates:%d  Contexts:%d  Max Word Num:%d\n' % (n_cands, n_prev_sents, max_n_words))
 
     ##########################
     # Convert words into ids #
@@ -46,9 +54,9 @@ def create_samples(argv, dev_dataset, test_dataset, vocab_words):
     ##################
     say('\n\nCreating samples...')
     dev_samples = get_samples(threads=dev_samples, n_prev_sents=n_prev_sents,
-                              max_n_words=max_n_words, sample_size=sample_size, test=True)
+                              max_n_words=max_n_words, test=True)
     test_samples = get_samples(threads=test_samples, n_prev_sents=n_prev_sents,
-                               max_n_words=max_n_words, sample_size=sample_size, test=True)
+                               max_n_words=max_n_words, test=True)
 
     ###################################
     # Create theano-formatted samples #
@@ -60,11 +68,12 @@ def create_samples(argv, dev_dataset, test_dataset, vocab_words):
         say('\n\nDev samples\tMini-Batch:%d' % len(dev_samples))
     if test_samples:
         say('\nTest samples\tMini-Batch:%d' % len(test_samples))
+
     return dev_samples, test_samples
 
 
 def main(argv):
-    print '\nADDRESSEE AND RESPONSE SELECTION SYSTEM START\n'
+    say('\nADDRESSEE AND RESPONSE SELECTION SYSTEM START\n')
 
     ###############
     # Set samples #

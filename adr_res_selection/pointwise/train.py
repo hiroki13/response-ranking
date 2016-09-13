@@ -1,164 +1,160 @@
-import sys
-import time
-
-from utils import io_utils
-from preprocessor import get_samples, load_dataset, load_init_emb, theano_format, theano_format_test
-from model_builder import set_model
-from decoder import Decoder
-from utils.io_utils import say
-from evaluator import Evaluator
-
-import numpy as np
+from ..utils import say, load_dataset, load_init_emb
+from model_api import ModelAPI
+from preprocessor import convert_word_into_id, get_samples, theano_format, theano_format_shared
 
 
-def train(argv):
-    print 'SET UP TRAINING SETTINGS'
+def get_datasets(argv):
+    say('\nSET UP DATASET\n')
 
-    ###########################
-    # Task setting parameters #
-    ###########################
-    n_cands = argv.n_cands
-    n_prev_sents = argv.n_prev_sents
-    max_n_words = argv.max_n_words
-    say('\n\nTASK  SETTING')
-    say('\n  Response Candidates:%d  Contexts:%d  Max Word Num:%d' % (n_cands, n_prev_sents, max_n_words))
+    sample_size = argv.sample_size
 
     #################
     # Load datasets #
     #################
-    # data: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
-    say('\n\nLoad data sets...')
-    train_data, vocab_words = load_dataset(argv.train_data, argv.check)
-    dev_data, vocab_words = load_dataset(argv.dev_data, argv.check, vocab_words)
-    test_data, vocab_words = load_dataset(argv.test_data, argv.check, vocab_words)
+    # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
+    say('\nLoad dataset...')
+    train_dataset, word_set = load_dataset(fn=argv.train_data, sample_size=sample_size, check=argv.check)
+    dev_dataset, word_set = load_dataset(fn=argv.dev_data, vocab=word_set, sample_size=sample_size, check=argv.check)
+    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, sample_size=sample_size, check=argv.check)
 
-    ################################
-    # Load initial word embeddings #
-    ################################
-    say('\n\nSet initial word embeddings...')
-    token_dict, emb = load_init_emb(argv.init_emb, vocab_words)
-    if argv.save:
-        io_utils.dump_data(data=token_dict, fn='vocab')
+    return train_dataset, dev_dataset, test_dataset, word_set
 
-    ################################
-    # Set up experimental settings #
-    ################################
+
+def create_samples(argv, train_dataset, dev_dataset, test_dataset, vocab_words):
+    ###########################
+    # Task setting parameters #
+    ###########################
+    n_prev_sents = argv.n_prev_sents
+    max_n_words = argv.max_n_words
+    batch_size = argv.batch
+
+    cands = train_dataset[0][0][3:-1]
+    n_cands = len(cands)
+
+    say('\n\nTASK  SETTING')
+    say('\n\tResponse Candidates:%d  Contexts:%d  Max Word Num:%d\n' % (n_cands, n_prev_sents, max_n_words))
+
+    ##########################
+    # Convert words into ids #
+    ##########################
+    say('\n\nConverting words into ids...')
     # dataset: 1D: n_samples; 2D: Sample
-    say('\n\nSetting datasets...')
+    train_samples = convert_word_into_id(train_dataset, vocab_words)
+    dev_samples = convert_word_into_id(dev_dataset, vocab_words)
+    test_samples = convert_word_into_id(test_dataset, vocab_words)
 
-    train_dataset = get_samples(threads=train_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
-                                max_n_words=max_n_words, test=False, sample_size=argv.sample_size)
-    tr_samples, tr_n_agents, tr_n_batches, tr_n_thread_agents = theano_format(train_dataset, argv.batch)
-    say('\n\nTRAIN SETTING\tBatch Size:%d  Epoch:%d  Vocab:%d  Max Words:%d  Unit:%s  Mini-Batch:%d' %
-        (argv.batch, argv.epoch, token_dict.size(), max_n_words, argv.unit, tr_n_batches))
+    ##################
+    # Create samples #
+    ##################
+    say('\n\nCreating samples...')
+    train_samples = get_samples(threads=train_samples, n_prev_sents=n_prev_sents,
+                                max_n_words=max_n_words)
+    dev_samples = get_samples(threads=dev_samples, n_prev_sents=n_prev_sents,
+                              max_n_words=max_n_words, test=True)
+    test_samples = get_samples(threads=test_samples, n_prev_sents=n_prev_sents,
+                               max_n_words=max_n_words, test=True)
 
-    if argv.dev_data:
-        dev_dataset = get_samples(threads=dev_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
-                                  max_n_words=max_n_words, test=True, sample_size=argv.sample_size)
-        dev_samples, dev_n_agents, dev_n_batches, dev_n_thread_agents = theano_format_test(dev_dataset)
-        say('\n\nDEV SETTING\tMini-Batch:%d' % dev_n_batches)
+    ###################################
+    # Create theano-formatted samples #
+    ###################################
+    train_samples, n_train_batches, evalset = theano_format_shared(train_samples, batch_size, n_cands=n_cands)
+    dev_samples = theano_format(dev_samples, batch_size, n_cands=n_cands, test=True)
+    test_samples = theano_format(test_samples, batch_size, n_cands=n_cands, test=True)
 
-    if argv.test_data:
-        test_dataset = get_samples(threads=test_data, token_dict=token_dict.w2i, n_prev_sents=n_prev_sents,
-                                   max_n_words=max_n_words, test=True, sample_size=argv.sample_size)
-        test_samples, test_n_agents, test_n_batches, test_n_thread_agents = theano_format_test(test_dataset)
-        say('\n\nTEST SETTING\tMini-Batch:%d' % test_n_batches)
+    say('\n\nTRAIN SETTING\tBatch Size:%d  Epoch:%d  Vocab:%d  Max Words:%d' %
+        (batch_size, argv.epoch, vocab_words.size(), max_n_words))
+    say('\n\nTrain samples\tMini-Batch:%d' % n_train_batches)
+    if dev_samples:
+        say('\nDev samples\tMini-Batch:%d' % len(dev_samples))
+    if test_samples:
+        say('\nTest samples\tMini-Batch:%d' % len(test_samples))
+    return train_samples, dev_samples, test_samples, n_train_batches, evalset
 
-    #################
-    # Build a model #
-    #################
-    say('\n\nBuilding a model...')
-    model = set_model(argv=argv, emb=emb, vocab=token_dict.w2i, n_prev_sents=n_prev_sents)
 
-    #################
-    # Set a decoder #
-    #################
-    decoder = Decoder(argv=argv, model=model)
-    decoder.set_train_f(tr_samples)
-    decoder.set_test_f()
+def train(argv, model_api, n_train_batches, evalset, dev_samples, test_samples):
+    say('\n\nTRAINING START\n')
 
-    ###################
-    # Train the model #
-    ###################
-    say('\nTraining start\n')
+    acc_history = {}
+    best_dev_acc_both = 0.
+    unchanged = 0
 
-    evaluator = Evaluator()
-    best_acc = 0.
-    best_epoch = 0
-    cand_indices = range(tr_n_batches)
+    batch_indices = range(n_train_batches)
 
     for epoch in xrange(argv.epoch):
+        ##############
+        # Early stop #
+        ##############
+        unchanged += 1
+        if unchanged > 5:
+            say('\n\nEARLY STOP\n')
+            break
+
+        ############
+        # Training #
+        ############
         say('\n\n\nEpoch: %d' % (epoch + 1))
-        say('\n  TRAIN\n  ')
+        say('\n  TRAIN  ')
 
-        best = False
-        start = time.time()
-        np.random.shuffle(cand_indices)
+        model_api.train_all(batch_indices, evalset)
 
-        for index, b_index in enumerate(cand_indices):
-            if index != 0 and index % 100 == 0:
-                say("  {}/{}".format(index, len(cand_indices)))
+        ##############
+        # Validating #
+        ##############
+        if dev_samples:
+            say('\n\n  DEV  ')
+            dev_acc_both, dev_acc_adr, dev_acc_res = model_api.predict_all(dev_samples)
 
-            avg_cost, pred_a, pred_r = decoder.train(b_index)
-
-            n_agents = tr_n_thread_agents[b_index]
-            evaluator.update(n_agents, avg_cost, pred_a, pred_r)
-
-        end = time.time()
-        say('\n\tTime: %f' % (end - start))
-        evaluator.show_results()
-
-        ############
-        # Dev data #
-        ############
-        if argv.dev_data:
-            say('\n\n  DEV\n  ')
-            predict(decoder, evaluator, dev_samples, dev_n_thread_agents)
-
-            if evaluator.acc_t > best_acc:
-                best = True
-                best_epoch = epoch + 1
-                best_acc = evaluator.acc_t
-                decoder.output('result.dev', dev_dataset, token_dict)
+            if dev_acc_both > best_dev_acc_both:
+                unchanged = 0
+                best_dev_acc_both = dev_acc_both
+                acc_history[epoch+1] = [(best_dev_acc_both, dev_acc_adr, dev_acc_res)]
 
                 if argv.save:
-                    fn = 'Model-%s.Unit-%s.batch-%d.reg-%f.psents-%d.mwords-%d' %\
-                         (argv.model, argv.unit, argv.batch, argv.reg, n_prev_sents, max_n_words)
-                    io_utils.dump_data(model, fn)
+                    model_api.save_model()
 
-            say('\n\n  BEST DEV ACC: Both:%f Epoch:%d' % (best_acc, best_epoch))
+        if test_samples:
+            say('\n\n\r  TEST  ')
+            test_acc_both, test_acc_adr, test_acc_res = model_api.predict_all(test_samples)
 
-        #############
-        # Test data #
-        #############
-        if argv.test_data:
-            say('\n\n\r  TEST\n  ')
-            predict(decoder, evaluator, test_samples, test_n_thread_agents)
-            if best:
-                decoder.output('result.test', test_dataset, token_dict)
-                say('\n\n  BEST TEST ACC: Both:%f Epoch:%d' % (evaluator.acc_t, best_epoch))
+            if unchanged == 0:
+                if epoch+1 in acc_history:
+                    acc_history[epoch+1].append((test_acc_both, test_acc_adr, test_acc_res))
+                else:
+                    acc_history[epoch+1] = [(test_acc_both, test_acc_adr, test_acc_res)]
 
-
-def predict(decoder, evaluator, samples, n_thread_agents):
-    decoder.answer_a = []
-    decoder.answer_r = []
-    decoder.prob_r = []
-    start = time.time()
-
-    for i, sample in enumerate(zip(*samples)):
-        if i != 0 and i % 100 == 0:
-            say("  {}/{}".format(i, len(samples[0])))
-
-        pred_a, pred_r = decoder.predict(sample)
-
-        n_agents = n_thread_agents[i]
-        evaluator.update(n_agents, 0., pred_a, pred_r)
-
-    end = time.time()
-    say('\n\tTime: %f' % (end - start))
-    evaluator.show_results()
+        #####################
+        # Show best results #
+        #####################
+        say('\n\tBEST ACCURACY HISTORY')
+        for k, v in sorted(acc_history.items()):
+            text = '\n\tEPOCH-{:>3} | DEV  Both:{:>7.2%}  Adr:{:>7.2%}  Res:{:>7.2%}'
+            text = text.format(k, v[0][0], v[0][1], v[0][2])
+            if len(v) == 2:
+                text += ' | TEST  Both:{:>7.2%}  Adr:{:>7.2%}  Res:{:>7.2%}'
+                text = text.format(v[1][0], v[1][1], v[1][2])
+            say(text)
 
 
 def main(argv):
-    print '\nADDRESSEE AND RESPONSE SELECTION SYSTEM START\n'
-    train(argv)
+    say('\nADDRESSEE AND RESPONSE SELECTION SYSTEM START\n')
+
+    ###############
+    # Set samples #
+    ###############
+    train_dataset, dev_dataset, test_dataset, word_set = get_datasets(argv)
+    vocab_words, init_emb = load_init_emb(argv.init_emb, word_set)
+    train_samples, dev_samples, test_samples, n_train_batches, evalset =\
+        create_samples(argv, train_dataset, dev_dataset, test_dataset, vocab_words)
+    del train_dataset
+    del dev_dataset
+    del test_dataset
+
+    ###############
+    # Set a model #
+    ###############
+    model_api = ModelAPI(argv, init_emb, vocab_words, argv.n_prev_sents)
+    model_api.set_model()
+    model_api.set_train_f(train_samples)
+    model_api.set_test_f()
+
+    train(argv, model_api, n_train_batches, evalset, dev_samples, test_samples)

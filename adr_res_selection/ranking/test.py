@@ -13,8 +13,8 @@ def get_datasets(argv):
     #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
     say('\nLoad dataset...')
-    dev_dataset, word_set = load_dataset(fn=argv.dev_data, sample_size=sample_size, check=argv.check)
-    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, sample_size=sample_size, check=argv.check)
+    dev_dataset, word_set = load_dataset(fn=argv.dev_data, data_size=sample_size, check=argv.check)
+    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, data_size=sample_size, check=argv.check)
 
     return dev_dataset, test_dataset, word_set
 

@@ -146,11 +146,8 @@ def count_dataset(fn):
     print 'Total Words: %d\tWords per Sample: %f\tSamples: %d' % (num_w, num_w/float(num_s), num_s)
 
 
-def load_dataset(fn, check=False, vocab=set([])):
+def load_dataset(fn, vocab=set([]), sample_size=1000000, check=False):
     """
-    :param fn:
-    :param check:
-    :param vocab:
     :return: samples: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, cand_res1, ... , label)
     """
     if fn is None:
@@ -158,13 +155,18 @@ def load_dataset(fn, check=False, vocab=set([])):
 
     samples = []
     sample = []
-    with gzip.open(fn, 'rb') as gf:
+    file_open = gzip.open if fn.endswith(".gz") else open
+
+    with file_open(fn) as gf:
         # line: (time, speaker_id, addressee_id, cand_res1, cand_res2, ... , label)
         for line in gf:
             line = line.rstrip().split("\t")
             if len(line) < 6:
                 samples.append(sample)
                 sample = []
+
+                if len(samples) >= sample_size:
+                    break
             else:
                 for i, sent in enumerate(line[3:-1]):
                     word_ids = []
@@ -185,6 +187,35 @@ def load_dataset(fn, check=False, vocab=set([])):
         say('\n\n LOAD DATA EXAMPLE:\n\t%s' % str(samples[0][0]))
 
     return samples, vocab
+
+
+def output_samples(fn, samples, vocab_word=None):
+    if samples is None:
+        return
+
+    with gzip.open(fn + '.gz', 'wb') as gf:
+        for sample in samples:
+            agent_index_dict = [None for i in xrange(len(sample.agent_index_dict))]
+            for k, v in sample.agent_index_dict.items():
+                agent_index_dict[v] = k
+
+            for a, c in zip(sample.spk_agents, sample.context):
+                text = '%s\t-\t' % agent_index_dict[a]
+                text += ' '.join([get_word(w, vocab_word) for w in c])
+                print >> gf, text
+
+            text = '%s\t%s\t' % (sample.spk_id, sample.adr_id)
+            for r in sample.response:
+                text += '%s\t' % ' '.join([get_word(w, vocab_word) for w in r])
+            text += '%d' % sample.true_res
+            print >> gf, text
+            print >> gf
+
+
+def get_word(w, vocab_word=None):
+    if vocab_word:
+        return vocab_word.get_word(w)
+    return w
 
 
 def save(fn, data):

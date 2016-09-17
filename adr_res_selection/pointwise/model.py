@@ -74,7 +74,7 @@ class Model(object):
         ########
         nll_a = binary_cross_entropy(true_p_a, false_p_a) * T.cast(T.gt(n_agents, 2), dtype=theano.config.floatX)
         nll_r = binary_cross_entropy(true_p_r, false_p_r)
-        nll = nll_r + nll_a
+        nll = 0.5 * nll_a + 0.5 * nll_r
 
         ########
         # Cost #

@@ -1,7 +1,7 @@
 import sys
 from collections import Counter
 
-from ..utils import say, load_dataset, output_samples
+from ..utils import say, load_dataset
 from ..utils.evaluator import Evaluator
 from preprocessor import get_samples, convert_sample_into_ids
 
@@ -142,28 +142,32 @@ def set_sent(sent):
 
 
 def get_datasets(argv):
-    sample_size = argv.sample_size
+    data_size = argv.data_size
 
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
     say('\n\nLoad dataset...')
-    train_dataset, word_set = load_dataset(fn=argv.train_data, sample_size=sample_size, check=argv.check)
-    dev_dataset, _ = load_dataset(fn=argv.dev_data, sample_size=sample_size, check=argv.check)
-    test_dataset, _ = load_dataset(fn=argv.test_data, sample_size=sample_size, check=argv.check)
+    train_dataset, word_set = load_dataset(fn=argv.train_data, data_size=data_size)
+    dev_dataset, _ = load_dataset(fn=argv.dev_data, data_size=data_size)
+    test_dataset, _ = load_dataset(fn=argv.test_data, data_size=data_size)
     return train_dataset, dev_dataset, test_dataset, word_set
 
 
 def create_samples(argv, train_dataset, dev_dataset, test_dataset):
     n_prev_sents = argv.n_prev_sents
-    max_n_words = argv.max_n_words
+    sample_size = argv.sample_size
 
     # samples: 1D: n_samples; elem=Sample()
     say('\n\nCreating samples...')
-    train_samples = get_samples(threads=train_dataset, n_prev_sents=n_prev_sents,
-                                max_n_words=max_n_words, pad=False)
-    dev_samples = get_samples(threads=dev_dataset, n_prev_sents=n_prev_sents,
-                              max_n_words=max_n_words, pad=False, test=True)
-    test_samples = get_samples(threads=test_dataset, n_prev_sents=n_prev_sents,
-                               max_n_words=max_n_words, pad=False, test=True)
+    train_samples = get_samples(threads=train_dataset, n_prev_sents=n_prev_sents)
+    dev_samples = get_samples(threads=dev_dataset, n_prev_sents=n_prev_sents, test=True)
+    test_samples = get_samples(threads=test_dataset, n_prev_sents=n_prev_sents, test=True)
+
+    ##########################
+    # Limit the used samples #
+    ##########################
+    if sample_size > 1:
+        np.random.shuffle(train_samples)
+        train_samples = train_samples[: (len(train_samples) / sample_size)]
 
     return train_samples, dev_samples, test_samples
 
@@ -187,11 +191,6 @@ def main(argv):
     train_dataset, dev_dataset, test_dataset, word_set = get_datasets(argv)
     train_samples, dev_samples, test_samples = create_samples(argv, train_dataset, dev_dataset, test_dataset)
     train_samples, dev_samples, test_samples, vocab_word = convert_samples(train_samples, dev_samples, test_samples)
-
-    if argv.output:
-        output_samples('train.sample', train_samples, vocab_word)
-        output_samples('dev.sample', dev_samples, vocab_word)
-        output_samples('test.sample', test_samples, vocab_word)
 
     ##################
     # Create a model #

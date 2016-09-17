@@ -1,20 +1,19 @@
-from ..utils import say, load_dataset, load_init_emb
+from ..utils import say, load_dataset, load_init_emb, load_data
 from model_api import ModelAPI
-from preprocessor import convert_word_into_id, get_samples, theano_format
+from preprocessor import convert_word_into_id, get_samples, numpy_format
 
 
 def get_datasets(argv):
     say('\nSET UP DATASET\n')
-
-    sample_size = argv.sample_size
 
     #################
     # Load datasets #
     #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
     say('\nLoad dataset...')
-    dev_dataset, word_set = load_dataset(fn=argv.dev_data, sample_size=sample_size, check=argv.check)
-    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, sample_size=sample_size, check=argv.check)
+    word_set = load_data(argv.wordset)
+    dev_dataset, _ = load_dataset(fn=argv.dev_data, vocab=word_set, test=True)
+    test_dataset, _ = load_dataset(fn=argv.test_data, vocab=word_set, test=True)
 
     return dev_dataset, test_dataset, word_set
 
@@ -61,8 +60,8 @@ def create_samples(argv, dev_dataset, test_dataset, vocab_words):
     ###################################
     # Create theano-formatted samples #
     ###################################
-    dev_samples = theano_format(dev_samples, batch_size, n_cands=n_cands, test=True)
-    test_samples = theano_format(test_samples, batch_size, n_cands=n_cands, test=True)
+    dev_samples = numpy_format(dev_samples, batch_size, test=True)
+    test_samples = numpy_format(test_samples, batch_size, test=True)
 
     if dev_samples:
         say('\n\nDev samples\tMini-Batch:%d' % len(dev_samples))

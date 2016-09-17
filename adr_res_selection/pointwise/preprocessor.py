@@ -1,7 +1,7 @@
 import theano
 import numpy as np
 
-from ..utils import say
+from ..utils.io_utils import say
 from ..utils.stats import statistics
 from ..ling import UNK
 from sample import Sample
@@ -40,9 +40,13 @@ def get_word_ids(tokens, vocab_word):
     return w_ids
 
 
-def get_samples(threads, n_prev_sents, max_n_words=20, pad=True, test=False):
+def get_samples(threads, n_prev_sents, max_n_words=1000, pad=True, test=False):
     """
     :param threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
+    :param n_prev_sents: how many previous sentences are used
+    :param max_n_words: how many words in a utterance are used
+    :param pad: whether do the zero padding or not
+    :param test: whether the dev/test set or not
     :return: samples: 1D: n_samples; elem=Sample()
     """
 
@@ -134,9 +138,11 @@ def get_max_n_words(context, response):
     return np.max([len(r) for r in response] + [len(c[-1]) for c in context])
 
 
-def theano_format(samples, batch_size, n_cands, test=False):
+def numpy_format(samples, batch_size, test=False):
     """
     :param samples: 1D: n_samples; elem=Sample
+    :param batch_size: int
+    :param test: whether dev/test or not; set boolean
     :return shared_sampleset: 1D: 8, 2D: n_baches, 3D: batch
     """
 
@@ -218,9 +224,10 @@ def theano_format(samples, batch_size, n_cands, test=False):
     return sampleset
 
 
-def theano_format_shared(samples, batch_size, n_cands):
+def theano_shared_format(samples, batch_size):
     """
     :param samples: 1D: n_samples; elem=Sample
+    :param batch_size: int
     :return shared_sampleset: 1D: 8, 2D: n_baches, 3D: batch
     """
 

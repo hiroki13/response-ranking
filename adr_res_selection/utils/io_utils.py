@@ -13,66 +13,79 @@ def say(s, stream=sys.stdout):
     stream.flush()
 
 
-def load_dataset(fn, vocab=set([]), sample_size=1000000, check=False):
+def load_dataset(fn, vocab=set([]), data_size=1000000, test=False, check=False):
     """
-    :return: samples: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, cand_res1, ... , label)
+    :param fn: file name
+    :param vocab: vocab set
+    :param data_size: how many threads are used
+    :param check: show an example data
+    :return: threads: 1D: n_threads, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, cand_res1, ... , label)
     """
     if fn is None:
         return None, vocab
 
-    samples = []
-    sample = []
+    threads = []
+    thread = []
     file_open = gzip.open if fn.endswith(".gz") else open
 
     with file_open(fn) as gf:
         # line: (time, speaker_id, addressee_id, cand_res1, cand_res2, ... , label)
         for line in gf:
             line = line.rstrip().split("\t")
-            if len(line) < 6:
-                samples.append(sample)
-                sample = []
 
-                if len(samples) >= sample_size:
+            if len(line) < 6:
+                threads.append(thread)
+                thread = []
+
+                if len(threads) >= data_size:
                     break
             else:
                 for i, sent in enumerate(line[3:-1]):
-                    word_ids = []
+                    words = []
                     for w in sent.split():
                         w = w.lower()
-                        vocab.add(w)
-                        word_ids.append(w)
-                    line[3 + i] = word_ids
+                        if test is False:
+                            vocab.add(w)
+                        words.append(w)
+                    line[3 + i] = words
 
-                ################################
-                # Label                        #
-                # -1: Not related utterances   #
-                # 0-: Candidate response index #
-                ################################
+                ##################
+                # Label          #
+                # -1: Not sample #
+                # 0-: Sample     #
+                ##################
                 line[-1] = -1 if line[-1] == '-' else int(line[-1])
-                sample.append(line)
+                thread.append(line)
+
     if check:
-        say('\n\n LOAD DATA EXAMPLE:\n\t%s' % str(samples[0][0]))
+        say('\n\n LOAD DATA EXAMPLE:\n\t%s' % str(threads[0][0]))
 
-    return samples, vocab
+    return threads, vocab
 
 
-def load_init_emb(init_emb, vocab_words):
+def load_init_emb(init_emb, word_set):
+    """
+    :param init_emb: Column 0 = word, Column 1- = value; e.g., [the 0.418 0.24968 -0.41242 ...]
+    :param word_set: the set of words that appear in train/dev/test set
+    :return: vocab_word: Vocab()
+    :return: emb: np.array
+    """
+
     say('\nLoad Initial Word Embedding...')
 
-    vocab = Vocab()
-
-    ########################
-    # Predefined vocab ids #
-    ########################
-    vocab.add_word(PAD)
-    vocab.add_word(UNK)
+    #################
+    # Set vocab word#
+    #################
+    vocab_word = Vocab()
+    vocab_word.add_word(PAD)
+    vocab_word.add_word(UNK)
 
     ################################
     # Load pre-trained  embeddings #
     ################################
     if init_emb is None:
-        for w in vocab_words:
-            vocab.add_word(w)
+        for w in word_set:
+            vocab_word.add_word(w)
         emb = None
         say('\n\tRandom Initialized Word Embeddings')
     else:
@@ -85,21 +98,21 @@ def load_init_emb(init_emb, vocab_words):
                 dim_emb = len(e)
 
                 if dim_emb == 300 or dim_emb == 50 or dim_emb == 100 or dim_emb == 200:
-                    if w in vocab_words and not vocab.has_key(w):
-                        vocab.add_word(w)
+                    if w in word_set and not vocab_word.has_key(w):
+                        vocab_word.add_word(w)
                         emb.append(np.asarray(e, dtype=theano.config.floatX))
 
         unk = np.mean(emb, 0)
         emb.insert(0, unk)
         emb = np.asarray(emb, dtype=theano.config.floatX)
 
-        assert emb.shape[0] == vocab.size() - 1, 'emb: %d  vocab: %d' % (emb.shape[0], vocab.size())
+        assert emb.shape[0] == vocab_word.size() - 1, 'emb: %d  vocab: %d' % (emb.shape[0], vocab_word.size())
         say('\n\tWord Embedding Size: %d' % emb.shape[0])
 
-    return vocab, emb
+    return vocab_word, emb
 
 
-def output_samples(fn, samples, vocab_word):
+def output_samples(fn, samples, vocab_word=None):
     if samples is None:
         return
 
@@ -111,15 +124,21 @@ def output_samples(fn, samples, vocab_word):
 
             for a, c in zip(sample.spk_agents, sample.context):
                 text = '%s\t-\t' % agent_index_dict[a]
-                text += ' '.join([vocab_word.get_word(w) for w in c])
+                text += ' '.join([get_word(w, vocab_word) for w in c])
                 print >> gf, text
 
             text = '%s\t%s\t' % (sample.spk_id, sample.adr_id)
             for r in sample.response:
-                text += '%s\t' % ' '.join([vocab_word.get_word(w) for w in r])
-            text += '%d' % sample.label
+                text += '%s\t' % ' '.join([get_word(w, vocab_word) for w in r])
+            text += '%d' % sample.true_res
             print >> gf, text
             print >> gf
+
+
+def get_word(w, vocab_word=None):
+    if vocab_word:
+        return vocab_word.get_word(w)
+    return w
 
 
 def dump_data(data, fn):

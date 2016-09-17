@@ -8,7 +8,7 @@ np.random.seed(0)
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Train NN tagger')
+    parser = argparse.ArgumentParser(description='Response Selection System')
 
     ################
     # Main options #

@@ -8,7 +8,7 @@ np.random.seed(0)
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Train NN tagger')
+    parser = argparse.ArgumentParser(description='Response Selection System')
 
     ################
     # Main options #
@@ -18,6 +18,8 @@ if __name__ == '__main__':
     parser.add_argument('--dev_data',  help='path to data')
     parser.add_argument('--test_data',  help='path to data')
     parser.add_argument('--model',  default='static', help='model')
+    parser.add_argument('--wordset',  default=None, help='word set')
+    parser.add_argument('--ofn',  default=None, help='output model file name')
     parser.add_argument('--check',  default=False, help='check the code')
 
     #############################
@@ -34,7 +36,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_prev_sents', type=int, default=5, help='prev sents')
     parser.add_argument('--max_n_words', type=int, default=20, help='maximum number of words for context/response')
     parser.add_argument('--n_cands', type=int, default=2, help='number of candidate responses')
-    parser.add_argument('--sample_size', type=int, default=10000000, help='sample size')
+    parser.add_argument('--data_size', type=int, default=10000000, help='data size')
+    parser.add_argument('--sample_size', type=int, default=1, help='sample size')
 
     parser.add_argument('--batch', type=int, default=32, help='batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')

@@ -58,11 +58,12 @@ class ModelAPI(object):
     def load_model(self):
         self.model = load_data(self.argv.load)
 
-    def save_model(self):
+    def save_model(self, ofn=None):
         argv = self.argv
-        fn = 'Model-%s.unit-%s.at-%d.batch-%d.reg-%f.sents-%d.words-%d' %\
-             (argv.model, argv.unit, argv.attention, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
-        dump_data(self.model, fn)
+        if ofn is None:
+            ofn = 'Model-%s.unit-%s.batch-%d.reg-%f.sents-%d.words-%d' % \
+                  (argv.model, argv.unit, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
+        dump_data(self.model, ofn)
 
     def set_train_f(self, train_samples):
         model = self.model

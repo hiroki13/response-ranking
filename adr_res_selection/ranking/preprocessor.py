@@ -40,7 +40,7 @@ def get_word_ids(tokens, vocab_word):
     return w_ids
 
 
-def get_samples(threads, n_prev_sents, max_n_words=20, pad=True, test=False):
+def get_samples(threads, n_prev_sents, max_n_words=1000, pad=True, test=False):
     """
     :param threads: 1D: n_threads, 2D: n_sents, 3D: (time, speaker_id, addressee_id, response, ..., label)
     :return: samples: 1D: n_samples; elem=Sample()

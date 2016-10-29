@@ -12,7 +12,13 @@ if __name__ == '__main__':
     # Data Creation
     parser.add_argument('--en', default=None, help='English files')
     parser.add_argument('--data', default=None, help='Data')
+    parser.add_argument('--train_data',  help='path to data')
+    parser.add_argument('--dev_data',  help='path to data')
+    parser.add_argument('--test_data',  help='path to data')
+
     parser.add_argument('--n_cands', type=int, default=2, help='Num of candidates')
+    parser.add_argument('--n_prev_sents', type=int, default=5, help='prev sents')
+    parser.add_argument('--max_n_words', type=int, default=20, help='maximum number of words for context/response')
 
     #################
     # Starting mode #
@@ -31,4 +37,7 @@ if __name__ == '__main__':
     elif argv.mode == 'cr':
         import candidate_remover
         candidate_remover.main(argv)
+    elif argv.mode == 'sv':
+        import stats_viewer
+        stats_viewer.main(argv)
 

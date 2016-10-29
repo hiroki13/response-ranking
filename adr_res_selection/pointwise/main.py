@@ -63,9 +63,6 @@ if __name__ == '__main__':
     if argv.mode == 'train':
         import train
         train.main(argv)
-    elif argv.mode == 'tfidf':
-        import tfidf
-        tfidf.main(argv)
     else:
         import test
         test.main(argv)

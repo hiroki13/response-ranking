@@ -3,7 +3,39 @@ from collections import defaultdict
 from io_utils import say
 
 
-def statistics(samples, max_n_agents):
+def dataset_statistics(dataset):
+    """
+    :param dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
+    """
+    n_docs = len(dataset)
+    n_utterances = 0
+    n_words = 0
+    n_agents = 0
+    max_n_agents = 0
+
+    for thread in dataset:
+        agents = set([])
+        n_utterances += len(thread)
+        for sent in thread:
+            label = sent[-1]
+            if label > -1:
+                sent_len = len(sent[3+label])
+            else:
+                sent_len = len(sent[3])
+            n_words += sent_len
+            agents.add(sent[1])
+
+        n_agents_tm = len(agents)
+        n_agents += n_agents_tm
+        if max_n_agents < n_agents_tm:
+            max_n_agents = n_agents_tm
+
+    say('\nDATASET STATS\n# Docs: {:>4} | # Utterances: {:>8} | # Words: {:>8}\n'.format(n_docs, n_utterances, n_words))
+    say('# Agents: {:>8} | # Max agents/Doc: {:>3}\n'.format(n_agents, max_n_agents))
+    say('Words/Utter: {:3.2f} | Agents/Doc: {:3.2f}\n'.format(n_words/float(n_utterances), n_agents/float(n_docs)))
+
+
+def sample_statistics(samples, max_n_agents):
     show_adr_chance_level(samples)
     show_adr_upper_bound(samples, max_n_agents)
     show_n_samples_binned_ctx(samples)

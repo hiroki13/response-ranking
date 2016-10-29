@@ -1,6 +1,6 @@
 from ..utils.io_utils import say, load_dataset, output_samples
 from ..utils.sample import Sample
-from ..utils.stats import statistics
+from ..utils.stats import sample_statistics
 
 
 def get_samples(threads, n_prev_sents, test=False):
@@ -20,7 +20,7 @@ def get_samples(threads, n_prev_sents, test=False):
     for thread in threads:
         samples += get_one_thread_samples(thread, max_n_agents, n_prev_sents, test)
 
-    statistics(samples, max_n_agents)
+    sample_statistics(samples, max_n_agents)
 
     return samples
 

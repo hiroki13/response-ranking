@@ -11,7 +11,7 @@ def get_datasets(argv):
     #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
     say('\nLoad dataset...')
-    word_set = load_data(argv.wordset)
+    word_set = load_data(argv.word_set)
     dev_dataset, _ = load_dataset(fn=argv.dev_data, vocab=word_set, test=True)
     test_dataset, _ = load_dataset(fn=argv.test_data, vocab=word_set, test=True)
 
@@ -91,7 +91,7 @@ def main(argv):
     model_api.set_test_f()
 
     if dev_samples:
-        say('\nDev set')
+        say('\n\nDev set')
         model_api.predict_all(dev_samples)
     if test_samples:
         say('\nTest set')

@@ -1,9 +1,9 @@
 import theano
 import theano.tensor as T
 
-from ..nn import rnn, attention
+from ..nn import binary_cross_entropy, regularization, get_grad_norm, optimizer_select
 from ..nn import initialize_weights, build_shared_zeros, sigmoid
-from ..nn import binary_cross_entropy, hinge_loss, cross_entropy_loss, regularization, get_grad_norm, optimizer_select
+from ..nn import rnn, attention
 from ..utils import say
 
 
@@ -22,7 +22,6 @@ class Model(object):
         ###################
         # Hyperparameters #
         ###################
-#        self.n_cands = argv.n_cands
         self.n_words = argv.max_n_words
         self.max_n_agents = max_n_agents
         self.n_vocab = n_vocab
@@ -55,7 +54,7 @@ class Model(object):
         self.r_hat = T.argmax(p_r, axis=1)
 
     def objective_f(self, p_a, p_r, y_a, y_r, n_agents):
-        # y_a: 1D: batch, 2D: max_n_agents; int32
+        # y_a: 1D: batch; 0/1
         # p_a: 1D: batch, 2D: n_agents-1; elem=scalar
 
         # p_arranged: 1D: batch, 2D: n_agents-1; C0=True, C1-Cn=False
@@ -64,20 +63,18 @@ class Model(object):
         p_a_arranged = p_a_arranged.reshape((y_a.shape[0], y_a.shape[1]))
         p_a_arranged = p_a_arranged * mask
 
-        p_r_arranged = p_r.ravel()[y_r.ravel()]
-        p_r_arranged = p_r_arranged.reshape((y_r.shape[0], y_r.shape[1]))
-
         true_p_a = p_a_arranged[:, 0]
         false_p_a = T.max(p_a_arranged[:, 1:], axis=1)
-        true_p_r = p_r_arranged[:, 0]
-        false_p_r = T.max(p_r_arranged[:, 1:], axis=1)
+
+        true_p_r = p_r[T.arange(y_r.shape[0]), y_r]
+        false_p_r = p_r[T.arange(y_r.shape[0]), 1 - y_r]
 
         ########
         # Loss #
         ########
         nll_a = binary_cross_entropy(true_p_a, false_p_a) * T.cast(T.gt(n_agents, 2), dtype=theano.config.floatX)
         nll_r = binary_cross_entropy(true_p_r, false_p_r)
-        nll = nll_r + nll_a
+        nll = 0.5 * nll_a + 0.5 * nll_r
 
         ########
         # Cost #

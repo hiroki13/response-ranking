@@ -18,7 +18,7 @@ if __name__ == '__main__':
     parser.add_argument('--dev_data',  help='path to data')
     parser.add_argument('--test_data',  help='path to data')
     parser.add_argument('--model',  default='static', help='model')
-    parser.add_argument('--wordset',  default=None, help='word set')
+    parser.add_argument('--word_set',  default=None, help='word set')
     parser.add_argument('--ofn',  default=None, help='output model file name')
     parser.add_argument('--check',  default=False, help='check the code')
 

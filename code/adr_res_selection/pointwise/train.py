@@ -1,3 +1,6 @@
+import os
+import shutil
+
 import numpy as np
 
 from ..utils import say, load_dataset, load_init_emb, dump_data
@@ -5,7 +8,7 @@ from model_api import ModelAPI
 from preprocessor import convert_word_into_id, get_samples, numpy_format, theano_shared_format
 
 
-def get_datasets(argv):
+def get_datasets(argv, output_dir='../data/model'):
     say('\nSET UP DATASET\n')
 
     data_size = argv.data_size
@@ -20,7 +23,11 @@ def get_datasets(argv):
     test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, data_size=data_size, check=argv.check)
 
     if argv.save:
-        dump_data(word_set, 'wordset.%d' % (len(word_set)))
+        if os.path.exists(output_dir) is False:
+            os.mkdir(output_dir)
+        output_fn = 'word_set.%d' % (len(word_set))
+        dump_data(word_set, output_fn)
+        shutil.move(output_fn + '.pkl.gz', output_dir)
 
     return train_dataset, dev_dataset, test_dataset, word_set
 

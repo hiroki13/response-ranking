@@ -102,7 +102,7 @@ class Model(object):
         return best_r
 
     def compute(self, samples):
-        say('\n\nTF-IDF COMPUTING START\n')
+        say('\nTF-IDF COMPUTING START\n')
         evaluator = Evaluator()
 
         for i, sample in enumerate(samples):
@@ -149,6 +149,7 @@ def get_datasets(argv):
     train_dataset, word_set = load_dataset(fn=argv.train_data, data_size=data_size)
     dev_dataset, _ = load_dataset(fn=argv.dev_data, data_size=data_size)
     test_dataset, _ = load_dataset(fn=argv.test_data, data_size=data_size)
+
     return train_dataset, dev_dataset, test_dataset, word_set
 
 
@@ -203,7 +204,9 @@ def main(argv):
     # Compute TF-IDF #
     ##################
     if dev_samples:
+        say('\nDEV SET')
         model.compute(dev_samples)
 
     if test_samples:
+        say('\nTEST SET')
         model.compute(test_samples)

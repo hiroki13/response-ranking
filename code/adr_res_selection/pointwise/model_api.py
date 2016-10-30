@@ -1,3 +1,5 @@
+import os
+import shutil
 import time
 import gzip
 import math
@@ -34,7 +36,7 @@ class ModelAPI(object):
         c = T.itensor3('c')
         r = T.itensor3('r')
         a = T.ftensor3('a')
-        y_r = T.imatrix('y_r')
+        y_r = T.ivector('y_r')
         y_a = T.imatrix('y_a')
         n_agents = T.iscalar('n_agents')
 
@@ -58,11 +60,17 @@ class ModelAPI(object):
     def load_model(self):
         self.model = load_data(self.argv.load)
 
-    def save_model(self):
+    def save_model(self, output_fn=None, output_dir='../data/model'):
         argv = self.argv
-        fn = 'Model-%s.unit-%s.at-%d.batch-%d.reg-%f.sents-%d.words-%d' %\
-             (argv.model, argv.unit, argv.attention, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
-        dump_data(self.model, fn)
+
+        if output_fn is None:
+            output_fn = 'Model-%s.unit-%s.batch-%d.reg-%f.sents-%d.words-%d' % \
+                        (argv.model, argv.unit, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
+        dump_data(self.model, output_fn)
+
+        if os.path.exists(output_dir + '/' + output_fn + '.pkl.gz'):
+            os.remove(output_dir + '/' + output_fn + '.pkl.gz')
+        shutil.move(output_fn + '.pkl.gz', output_dir)
 
     def set_train_f(self, train_samples):
         model = self.model

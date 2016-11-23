@@ -3,7 +3,7 @@ import tfidf
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Response Selection System')
+    parser = argparse.ArgumentParser(description='Addressee and Response Selection System')
 
     ################
     # Main options #

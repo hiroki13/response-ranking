@@ -1,15 +1,13 @@
-import time
-import gzip
 import math
-import cPickle as pickle
+import time
 
 import numpy as np
 import theano
 import theano.tensor as T
 
-from ..utils import say, load_data, dump_data
-from ..utils.evaluator import Evaluator
 from model import StaticModel, DynamicModel
+from ..utils import say, load_data, dump_data, create_path, move_data, check_identifier
+from ..utils.evaluator import Evaluator
 
 
 class ModelAPI(object):
@@ -34,7 +32,7 @@ class ModelAPI(object):
         c = T.itensor3('c')
         r = T.itensor3('r')
         a = T.ftensor3('a')
-        y_r = T.imatrix('y_r')
+        y_r = T.ivector('y_r')
         y_a = T.imatrix('y_a')
         n_agents = T.iscalar('n_agents')
 
@@ -56,13 +54,18 @@ class ModelAPI(object):
         self.model.compile(c=c, r=r, a=a, y_r=y_r, y_a=y_a, n_agents=n_agents)
 
     def load_model(self):
-        self.model = load_data(self.argv.load)
+        self.model = load_data(self.argv.load_model)
 
-    def save_model(self):
+    def save_model(self, output_fn=None, output_dir='../data/model'):
         argv = self.argv
-        fn = 'Model-%s.unit-%s.batch-%d.reg-%f.sents-%d.words-%d' %\
-             (argv.model, argv.unit, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
-        dump_data(self.model, fn)
+
+        if output_fn is None:
+            output_fn = 'model-%s.unit-%s.batch-%d.reg-%f.sents-%d.words-%d' % \
+                        (argv.model, argv.unit, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
+            output_fn = check_identifier(output_fn)
+        dump_data(self.model, output_fn)
+        create_path(output_dir)
+        move_data(output_fn, output_dir)
 
     def set_train_f(self, train_samples):
         model = self.model
@@ -122,7 +125,6 @@ class ModelAPI(object):
 
         end = time.time()
         say('\n\tTime: %f' % (end - start))
-        say("\n\tp_norm: {}\n".format(self.get_pnorm_stat()))
         evaluator.show_results()
 
     def predict(self, c, r, a, y_r, y_a, n_agents):

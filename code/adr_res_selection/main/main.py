@@ -23,13 +23,13 @@ if __name__ == '__main__':
     ###############
     # Output Data #
     ###############
-    parser.add_argument('--output_fn',  default=None, help='file name of the saved model')
+    parser.add_argument('--output_fn',  default=None, help='file name of the model to be saved')
     parser.add_argument('--output', type=int, default=0, help='output results or not')
 
     #################
     # Save and Load #
     #################
-    parser.add_argument('--save', type=int, default=0, help='parameters to be saved or not')
+    parser.add_argument('--save', type=int, default=1, help='parameters to be saved or not')
     parser.add_argument('--load_model', default=None, help='model file to be loaded')
     parser.add_argument('--load_words',  default=None, help='words used for the embedding')
 
@@ -44,11 +44,12 @@ if __name__ == '__main__':
     #######################
     # Training parameters #
     #######################
+    parser.add_argument('--data_size', type=int, default=10000000, help='number of threads used for the task')
+    parser.add_argument('--sample_size', type=int, default=1, help='number of division of samples used for the task')
+
     parser.add_argument('--n_cands', type=int, default=2, help='number of candidate responses')
     parser.add_argument('--n_prev_sents', type=int, default=5, help='number of the sentences used for the prediction')
     parser.add_argument('--max_n_words', type=int, default=20, help='maximum number of words for context/response')
-    parser.add_argument('--data_size', type=int, default=10000000, help='data size')
-    parser.add_argument('--sample_size', type=int, default=1, help='sample size')
 
     parser.add_argument('--batch', type=int, default=32, help='batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')

@@ -1,9 +1,6 @@
-import os
-import shutil
-
 import numpy as np
 
-from ..utils import say, load_dataset, load_init_emb, dump_data
+from ..utils import say, load_dataset, load_init_emb, dump_data, create_path, move_data, check_identifier
 from model_api import ModelAPI
 from preprocessor import convert_word_into_id, get_samples, numpy_format, theano_shared_format
 
@@ -18,18 +15,18 @@ def get_datasets(argv, output_dir='../data/model'):
     #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
     say('\nLoad dataset...')
-    train_dataset, word_set = load_dataset(fn=argv.train_data, data_size=data_size, check=argv.check)
-    dev_dataset, word_set = load_dataset(fn=argv.dev_data, vocab=word_set, data_size=data_size, check=argv.check)
-    test_dataset, word_set = load_dataset(fn=argv.test_data, vocab=word_set, data_size=data_size, check=argv.check)
+    train_dataset, words = load_dataset(fn=argv.train_data, data_size=data_size)
+    dev_dataset, words = load_dataset(fn=argv.dev_data, vocab=words, data_size=data_size)
+    test_dataset, words = load_dataset(fn=argv.test_data, vocab=words, data_size=data_size)
 
     if argv.save:
-        if os.path.exists(output_dir) is False:
-            os.mkdir(output_dir)
-        output_fn = 'word_set.%d' % (len(word_set))
-        dump_data(word_set, output_fn)
-        shutil.move(output_fn + '.pkl.gz', output_dir)
+        create_path(output_dir)
+        output_fn = 'words.%d' % (len(words))
+        output_fn = check_identifier(output_fn)
+        dump_data(words, output_fn)
+        move_data(output_fn, output_dir)
 
-    return train_dataset, dev_dataset, test_dataset, word_set
+    return train_dataset, dev_dataset, test_dataset, words
 
 
 def create_samples(argv, train_dataset, dev_dataset, test_dataset, vocab_word):
@@ -127,7 +124,7 @@ def train(argv, model_api, n_train_batches, evalset, dev_samples, test_samples):
                 acc_history[epoch+1] = [(best_dev_acc_both, dev_acc_adr, dev_acc_res)]
 
                 if argv.save:
-                    model_api.save_model(argv.ofn)
+                    model_api.save_model(argv.output_fn)
 
         if test_samples:
             say('\n\n\r  TEST  ')
@@ -158,8 +155,8 @@ def main(argv):
     ###############
     # Set samples #
     ###############
-    train_dataset, dev_dataset, test_dataset, word_set = get_datasets(argv)
-    vocab_words, init_emb = load_init_emb(argv.init_emb, word_set)
+    train_dataset, dev_dataset, test_dataset, words = get_datasets(argv)
+    vocab_words, init_emb = load_init_emb(argv.init_emb, words)
     train_samples, dev_samples, test_samples, n_train_batches, evalset =\
         create_samples(argv, train_dataset, dev_dataset, test_dataset, vocab_words)
     del train_dataset

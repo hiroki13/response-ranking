@@ -53,7 +53,7 @@ def get_samples(threads, n_prev_sents, max_n_words=1000, pad=True, test=False):
     if threads is None:
         return None
 
-    say('\n\n\tTHREADS: {:>5}'.format(len(threads)))
+    say('\n\tTHREADS: {:>5}'.format(len(threads)))
 
     samples = []
     max_n_agents = n_prev_sents + 1

@@ -8,19 +8,30 @@ np.random.seed(0)
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Response Selection System')
+    parser = argparse.ArgumentParser(description='Addressee and Response Selection System')
 
-    ################
-    # Main options #
-    ################
     parser.add_argument('-mode',  default='train', help='train/test')
-    parser.add_argument('--train_data',  help='path to data')
-    parser.add_argument('--dev_data',  help='path to data')
-    parser.add_argument('--test_data',  help='path to data')
-    parser.add_argument('--model',  default='static', help='model')
-    parser.add_argument('--word_set',  default=None, help='word set')
-    parser.add_argument('--ofn',  default=None, help='output model file name')
-    parser.add_argument('--check',  default=False, help='check the code')
+    parser.add_argument('--model',  default='static', help='static/dynamic')
+
+    ##############
+    # Input Data #
+    ##############
+    parser.add_argument('--train_data',  help='path to a training data')
+    parser.add_argument('--dev_data',  help='path to a development data')
+    parser.add_argument('--test_data',  help='path to a test data')
+
+    ###############
+    # Output Data #
+    ###############
+    parser.add_argument('--output_fn',  default=None, help='file name of the saved model')
+    parser.add_argument('--output', type=int, default=0, help='output results or not')
+
+    #################
+    # Save and Load #
+    #################
+    parser.add_argument('--save', type=int, default=0, help='parameters to be saved or not')
+    parser.add_argument('--load_model', default=None, help='model file to be loaded')
+    parser.add_argument('--load_words',  default=None, help='words used for the embedding')
 
     #############################
     # Neural Network parameters #
@@ -33,9 +44,9 @@ if __name__ == '__main__':
     #######################
     # Training parameters #
     #######################
-    parser.add_argument('--n_prev_sents', type=int, default=5, help='prev sents')
-    parser.add_argument('--max_n_words', type=int, default=20, help='maximum number of words for context/response')
     parser.add_argument('--n_cands', type=int, default=2, help='number of candidate responses')
+    parser.add_argument('--n_prev_sents', type=int, default=5, help='number of the sentences used for the prediction')
+    parser.add_argument('--max_n_words', type=int, default=20, help='maximum number of words for context/response')
     parser.add_argument('--data_size', type=int, default=10000000, help='data size')
     parser.add_argument('--sample_size', type=int, default=1, help='sample size')
 
@@ -47,10 +58,6 @@ if __name__ == '__main__':
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
     parser.add_argument('--attention', type=int, default=0, help='attention')
-
-    parser.add_argument('--save', type=int, default=0, help='parameters to be saved or not')
-    parser.add_argument('--load', default=None, help='model file to be loaded')
-    parser.add_argument('--output', type=int, default=0, help='output results')
 
     #################
     # Starting mode #

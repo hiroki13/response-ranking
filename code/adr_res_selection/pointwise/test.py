@@ -11,34 +11,32 @@ def get_datasets(argv):
     #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
     say('\nLoad dataset...')
-    word_set = load_data(argv.word_set)
-    dev_dataset, _ = load_dataset(fn=argv.dev_data, vocab=word_set, test=True)
-    test_dataset, _ = load_dataset(fn=argv.test_data, vocab=word_set, test=True)
+    words = load_data(argv.load_words)
+    dev_dataset, _ = load_dataset(fn=argv.dev_data, vocab=words, test=True)
+    test_dataset, _ = load_dataset(fn=argv.test_data, vocab=words, test=True)
 
-    return dev_dataset, test_dataset, word_set
+    return dev_dataset, test_dataset, words
 
 
 def create_samples(argv, dev_dataset, test_dataset, vocab_words):
     ###########################
     # Task setting parameters #
     ###########################
+    n_cands = None
     n_prev_sents = argv.n_prev_sents
     max_n_words = argv.max_n_words
     batch_size = argv.batch
 
     if dev_dataset:
-        dataset = dev_dataset
+        n_cands = len(dev_dataset[0][0][3:-1])
     elif test_dataset:
-        dataset = test_dataset
+        n_cands = len(test_dataset[0][0][3:-1])
     else:
         say('\nInput dataset\n')
         exit()
 
-    cands = dataset[0][0][3:-1]
-    n_cands = len(cands)
-
     say('\n\nTASK  SETTING')
-    say('\n\tResponse Candidates:%d  Contexts:%d  Max Word Num:%d\n' % (n_cands, n_prev_sents, max_n_words))
+    say('\n\tResponse Candidates:%d  Contexts:%d  Max Word Num:%d' % (n_cands, n_prev_sents, max_n_words))
 
     ##########################
     # Convert words into ids #
@@ -77,8 +75,8 @@ def main(argv):
     ###############
     # Set samples #
     ###############
-    dev_dataset, test_dataset, word_set = get_datasets(argv)
-    vocab_words, init_emb = load_init_emb(argv.init_emb, word_set)
+    dev_dataset, test_dataset, words = get_datasets(argv)
+    vocab_words, init_emb = load_init_emb(argv.init_emb, words)
     dev_samples, test_samples = create_samples(argv, dev_dataset, test_dataset, vocab_words)
     del dev_dataset
     del test_dataset

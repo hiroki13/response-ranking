@@ -1,4 +1,6 @@
+import os
 import sys
+import shutil
 import gzip
 import cPickle
 
@@ -13,12 +15,11 @@ def say(s, stream=sys.stdout):
     stream.flush()
 
 
-def load_dataset(fn, vocab=set([]), data_size=1000000, test=False, check=False):
+def load_dataset(fn, vocab=set([]), data_size=1000000, test=False):
     """
     :param fn: file name
     :param vocab: vocab set
     :param data_size: how many threads are used
-    :param check: show an example data
     :return: threads: 1D: n_threads, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, cand_res1, ... , label)
     """
     if fn is None:
@@ -57,9 +58,6 @@ def load_dataset(fn, vocab=set([]), data_size=1000000, test=False, check=False):
                 line[-1] = -1 if line[-1] == '-' else int(line[-1])
                 thread.append(line)
 
-    if check:
-        say('\n\n LOAD DATA EXAMPLE:\n\t%s' % str(threads[0][0]))
-
     return threads, vocab
 
 
@@ -71,7 +69,7 @@ def load_init_emb(init_emb, word_set):
     :return: emb: np.array
     """
 
-    say('\nLoad Initial Word Embedding...')
+    say('\nLoad initial word embedding...')
 
     #################
     # Set vocab word#
@@ -142,11 +140,42 @@ def get_word(w, vocab_word=None):
 
 
 def dump_data(data, fn):
-    with gzip.open(fn + '.pkl.gz', 'wb') as gf:
+    fn = check_identifier(fn)
+    with gzip.open(fn, 'wb') as gf:
         cPickle.dump(data, gf, cPickle.HIGHEST_PROTOCOL)
 
 
 def load_data(fn):
+    fn = check_identifier(fn)
     with gzip.open(fn, 'rb') as gf:
         return cPickle.load(gf)
+
+
+def create_path(output_path):
+    path = ''
+    dir_names = output_path.split('/')
+    for dir_name in dir_names:
+        path += dir_name
+        if not os.path.exists(path):
+            os.mkdir(path)
+        path += '/'
+
+
+def move_data(src, dst):
+    if not os.path.exists(dst):
+        path = ''
+        for dn in dst.split('/'):
+            path += dn + '/'
+            if os.path.exists(path):
+                continue
+            os.mkdir(path)
+    if os.path.exists(os.path.join(dst, src)):
+        os.remove(os.path.join(dst, src))
+    shutil.move(src, dst)
+
+
+def check_identifier(fn):
+    if not fn.endswith(".pkl.gz"):
+        fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
+    return fn
 

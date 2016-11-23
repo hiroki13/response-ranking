@@ -61,8 +61,8 @@ class Evaluator(object):
         ###########################
         # Training-related values #
         ###########################
-        say('\n\tTotal NLL: %f\tTotal Grad Norm: %f' % (self.ttl_cost, self.ttl_g_norm))
-        say('\n\tAvg.  NLL: %f\tAvg.  Grad Norm: %f' % (self.ttl_cost / self.index, self.ttl_g_norm / self.index))
+        say('\n\tTotal Loss: %f\tTotal Grad Norm: %f' % (self.ttl_cost, self.ttl_g_norm))
+        say('\n\tAvg.  Loss: %f\tAvg.  Grad Norm: %f' % (self.ttl_cost / self.index, self.ttl_g_norm / self.index))
 
         ######################
         # Prediction results #

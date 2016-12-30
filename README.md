@@ -8,6 +8,7 @@ This repo contains Theano implementations of the models described in the followi
 
 #### Dataset
 The dataset can be downloaded at [data/input](/data/input).
+  - When you use /data/input/train-data.cand-10.1/2.gz, please concatenate these two files into one: `zcat train-data.cand-10.1.gz train-data.cand-10.2.gz | gzip > train-data-cand-10.gz`
 
 #### Dependencies
 To run the code, you need the following extra packages installed:
@@ -19,5 +20,5 @@ To run the code, you need the following extra packages installed:
   3. Run `python -m adr_res_selection.main.main --help` to see all running options
 
 #### Example Comand
-  - Static Model: `python -m adr_res_selection.main.main -mode train --train_data ../data/input/train-data.cand-2.gz --dev_data ../data/input/dev-data.cand-2.gz --test_data ../data/input/test-data.cand-2.gz --model static --data_size 100`
-  - Dynamic Model: `python -m adr_res_selection.main.main -mode train --train_data ../data/input/train-data.cand-2.gz --dev_data ../data/input/dev-data.cand-2.gz --test_data ../data/input/test-data.cand-2.gz --model dynamic --data_size 100`
+  - Static Model: `python -m adr_res_selection.main.main -mode train --train_data ../data/input/train-data.cand-2.gz --dev_data ../data/input/dev-data.cand-2.gz --test_data ../data/input/test-data.cand-2.gz --model static`
+  - Dynamic Model: `python -m adr_res_selection.main.main -mode train --train_data ../data/input/train-data.cand-2.gz --dev_data ../data/input/dev-data.cand-2.gz --test_data ../data/input/test-data.cand-2.gz --model dynamic`

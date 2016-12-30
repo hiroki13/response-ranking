@@ -11,6 +11,7 @@ if __name__ == '__main__':
 
     # Data Creation
     parser.add_argument('--en', default=None, help='English files')
+    parser.add_argument('--fn', default=None, help='File Name')
     parser.add_argument('--data', default=None, help='Data')
     parser.add_argument('--train_data',  help='path to data')
     parser.add_argument('--dev_data',  help='path to data')
@@ -37,6 +38,9 @@ if __name__ == '__main__':
     elif argv.mode == 'cr':
         import candidate_remover
         candidate_remover.main(argv)
+    elif argv.mode =='dis':
+        import distractor_generator
+        distractor_generator.main(argv)
     elif argv.mode == 'sv':
         import stats_viewer
         stats_viewer.main(argv)

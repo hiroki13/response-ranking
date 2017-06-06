@@ -2,30 +2,16 @@ import numpy as np
 
 from ..preprocess import convert_word_into_id, get_samples, numpy_format, theano_shared_format
 from ..model import ModelAPI
-from ..utils import say, load_dataset, load_init_emb, dump_data, create_path, move_data, check_identifier
+from ..utils import say, load_dataset, load_init_emb, load_multi_ling_init_emb
 
 
-def get_datasets(argv, output_dir='../data/model'):
+def get_datasets(argv):
     say('\nSET UP DATASET\n')
-
-    data_size = argv.data_size
-
-    #################
-    # Load datasets #
-    #################
     # dataset: 1D: n_docs, 2D: n_utterances, 3D: elem=(time, speaker_id, addressee_id, response1, ... , label)
     say('\nLoad dataset...')
-    train_dataset, words = load_dataset(fn=argv.train_data, data_size=data_size)
-    dev_dataset, words = load_dataset(fn=argv.dev_data, vocab=words, data_size=data_size)
-    test_dataset, words = load_dataset(fn=argv.test_data, vocab=words, data_size=data_size)
-
-    if argv.save:
-        create_path(output_dir)
-        output_fn = 'words.%d' % (len(words))
-        output_fn = check_identifier(output_fn)
-        dump_data(words, output_fn)
-        move_data(output_fn, output_dir)
-
+    train_dataset, words = load_dataset(fn=argv.train_data, data_size=argv.data_size)
+    dev_dataset, words = load_dataset(fn=argv.dev_data, vocab=words, data_size=argv.data_size)
+    test_dataset, words = load_dataset(fn=argv.test_data, vocab=words, data_size=argv.data_size)
     return train_dataset, dev_dataset, test_dataset, words
 
 
@@ -124,7 +110,8 @@ def train(argv, model_api, n_train_batches, evalset, dev_samples, test_samples):
                 acc_history[epoch+1] = [(best_dev_acc_both, dev_acc_adr, dev_acc_res)]
 
                 if argv.save:
-                    model_api.save_model(argv.output_fn)
+#                    model_api.save_model(argv.output_fn)
+                    model_api.save_params(argv.output_fn)
 
         if test_samples:
             say('\n\n\r  TEST  ')
@@ -153,10 +140,21 @@ def main(argv):
     say('\nADDRESSEE AND RESPONSE SELECTION SYSTEM START\n')
 
     ###############
-    # Set samples #
+    # Set dataset #
     ###############
     train_dataset, dev_dataset, test_dataset, words = get_datasets(argv)
-    vocab_words, init_emb = load_init_emb(argv.init_emb, words)
+
+    ##########################
+    # Set initial embeddings #
+    ##########################
+    if argv.emb_type == 'mono':
+        vocab_words, init_emb = load_init_emb(argv.init_emb, words)
+    else:
+        vocab_words, init_emb = load_multi_ling_init_emb(argv.init_emb, argv.lang)
+
+    ###############
+    # Set samples #
+    ###############
     train_samples, dev_samples, test_samples, n_train_batches, evalset =\
         create_samples(argv, train_dataset, dev_dataset, test_dataset, vocab_words)
     del train_dataset

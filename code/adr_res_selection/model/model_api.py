@@ -53,19 +53,20 @@ class ModelAPI(object):
         self.model = model(argv, max_n_agents, n_vocab, init_emb)
         self.model.compile(c=c, r=r, a=a, y_r=y_r, y_a=y_a, n_agents=n_agents)
 
-    def load_model(self):
-        self.model = load_data(self.argv.load_model)
-
-    def save_model(self, output_fn=None, output_dir='../data/model'):
+    def save_params(self, fn=None, dir='../data/model'):
         argv = self.argv
+        if fn is None:
+            fn = 'param.model-%s.unit-%s.hidden-%d' % (argv.model, argv.unit, argv.dim_hidden)
+        fn = check_identifier(fn)
+        dump_data(data=map(lambda p: p.get_value(borrow=True), self.model.params), fn=fn)
+        create_path(dir)
+        move_data(fn, dir)
 
-        if output_fn is None:
-            output_fn = 'model-%s.unit-%s.batch-%d.reg-%f.sents-%d.words-%d' % \
-                        (argv.model, argv.unit, argv.batch, argv.reg, argv.n_prev_sents, argv.max_n_words)
-            output_fn = check_identifier(output_fn)
-        dump_data(self.model, output_fn)
-        create_path(output_dir)
-        move_data(output_fn, output_dir)
+    def load_params(self):
+        params = load_data(self.argv.load_param)
+        assert len(self.model.params) == len(params)
+        for p1, p2 in zip(self.model.params, params):
+            p1.set_value(p2)
 
     def set_train_f(self, train_samples):
         model = self.model

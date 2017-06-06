@@ -30,8 +30,14 @@ if __name__ == '__main__':
     # Save and Load #
     #################
     parser.add_argument('--save', type=int, default=1, help='parameters to be saved or not')
-    parser.add_argument('--load_model', default=None, help='model file to be loaded')
-    parser.add_argument('--load_words',  default=None, help='words used for the embedding')
+    parser.add_argument('--load_param', default=None, help='model file to be loaded')
+
+    ######################
+    # Initial Embeddings #
+    ######################
+    parser.add_argument('--emb_type', default='mono', help='mono/multi')
+    parser.add_argument('--lang', default='en', help='en/it...')
+    parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
 
     #############################
     # Neural Network parameters #
@@ -57,7 +63,6 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--activation', default='tanh', help='activation')
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
-    parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
     parser.add_argument('--attention', type=int, default=0, help='attention')
 
     #################

@@ -61,7 +61,7 @@ def load_dataset(fn, vocab=set([]), data_size=1000000, test=False):
     return threads, vocab
 
 
-def load_init_emb(init_emb, word_set):
+def load_init_emb(init_emb, word_set=None):
     """
     :param init_emb: Column 0 = word, Column 1- = value; e.g., [the 0.418 0.24968 -0.41242 ...]
     :param word_set: the set of words that appear in train/dev/test set
@@ -71,9 +71,9 @@ def load_init_emb(init_emb, word_set):
 
     say('\nLoad initial word embedding...')
 
-    #################
-    # Set vocab word#
-    #################
+    ##################
+    # Set vocab word #
+    ##################
     vocab_word = Vocab()
     vocab_word.add_word(PAD)
     vocab_word.add_word(UNK)
@@ -96,7 +96,7 @@ def load_init_emb(init_emb, word_set):
                 dim_emb = len(e)
 
                 if dim_emb == 300 or dim_emb == 50 or dim_emb == 100 or dim_emb == 200:
-                    if w in word_set and not vocab_word.has_key(w):
+                    if not vocab_word.has_key(w):
                         vocab_word.add_word(w)
                         emb.append(np.asarray(e, dtype=theano.config.floatX))
 
@@ -106,6 +106,45 @@ def load_init_emb(init_emb, word_set):
 
         assert emb.shape[0] == vocab_word.size() - 1, 'emb: %d  vocab: %d' % (emb.shape[0], vocab_word.size())
         say('\n\tWord Embedding Size: %d' % emb.shape[0])
+
+    return vocab_word, emb
+
+
+def load_multi_ling_init_emb(init_emb, target_lang):
+    """
+    :param init_emb: Column 0 = word, Column 1- = value; e.g., [the 0.418 0.24968 -0.41242 ...]
+    :return: vocab_word: Vocab()
+    :return: emb: np.array
+    """
+
+    say('\nLoad initial word embedding...')
+
+    ##################
+    # Set vocab word #
+    ##################
+    vocab_word = Vocab()
+    vocab_word.add_word(PAD)
+    vocab_word.add_word(UNK)
+
+    emb = []
+    with open(init_emb) as lines:
+        for line in lines:
+            line = line.strip().decode('utf-8').split()
+            lang = line[0][:2]
+            w = line[0][2:]
+            if lang != target_lang:
+                continue
+            e = line[1:]
+            if not vocab_word.has_key(w):
+                vocab_word.add_word(w)
+                emb.append(np.asarray(e, dtype=theano.config.floatX))
+
+    unk = np.mean(emb, 0)
+    emb.insert(0, unk)
+    emb = np.asarray(emb, dtype=theano.config.floatX)
+
+    assert emb.shape[0] == vocab_word.size() - 1, 'emb: %d  vocab: %d' % (emb.shape[0], vocab_word.size())
+    say('\n\tWord Embedding Size: %d' % emb.shape[0])
 
     return vocab_word, emb
 

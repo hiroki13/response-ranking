@@ -131,7 +131,7 @@ def load_multi_ling_init_emb(init_emb, target_lang):
         for line in lines:
             line = line.strip().decode('utf-8').split()
             lang = line[0][:2]
-            w = line[0][2:]
+            w = line[0][3:]
             if lang != target_lang:
                 continue
             e = line[1:]
